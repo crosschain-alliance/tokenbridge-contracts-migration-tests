@@ -1,0 +1,3 @@
+[submodule "tokenbridge-contracts"]
+	path = tokenbridge-contracts
+	url = https://github.com/crosschain-alliance/tokenbridge-contracts

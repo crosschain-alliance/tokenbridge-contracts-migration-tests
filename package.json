@@ -1,0 +1,24 @@
+{
+  "name": "tokenbridge-contracts-migration-test",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "npx hardhat test",
+    "prettier:write": "prettier --write \"**/*.{js,json,md,sol,ts,yml}\""
+  },
+  "author": "alle.manfredi@gmail.com",
+  "license": "MIT",
+  "devDependencies": {
+    "@nomicfoundation/edr-darwin-x64": "^0.3.4",
+    "@nomicfoundation/hardhat-ethers": "^3.0.5",
+    "@nomicfoundation/hardhat-network-helpers": "^1.0.10",
+    "@nomicfoundation/hardhat-toolbox": "^5.0.0",
+    "@openzeppelin/hardhat-upgrades": "^3.0.5",
+    "dotenv": "^16.4.5",
+    "hardhat": "^2.22.2",
+    "openzeppelin-solidity": "1.12.0",
+    "prettier": "^2.8.7",
+    "prettier-plugin-solidity": "^1.0.0"
+  }
+}
