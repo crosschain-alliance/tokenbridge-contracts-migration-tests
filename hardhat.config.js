@@ -6,7 +6,7 @@ module.exports = {
   networks: {
     hardhat: {
       forking: {
-        url: process.env.MAINNET_JSON_RPC_URL,
+        url: process.env.GNOSIS_JSON_RPC_URL, //process.env.MAINNET_JSON_RPC_URL,
       },
       chainId: 1,
     },
@@ -18,8 +18,9 @@ module.exports = {
         settings: {
           optimizer: {
             enabled: true,
-            runs: 10000,
+            runs: 200,
           },
+          evmVersion: "byzantium",
         },
       },
       {

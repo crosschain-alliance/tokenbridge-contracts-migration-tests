@@ -1,18 +1,18 @@
 const { ethers } = require("hardhat")
 const { expect } = require("chai")
 
-const { strip0x, packSignatures, signatureToVrs, append0 } = require("./utils")
+const { strip0x } = require("./utils")
 
-const FOREIGN_AMB_PROXY_ADDRESS = "0x4C36d2919e407f0Cc2Ee3c993ccF8ac26d9CE64e"
-const OWNER_ADDRESS = "0x42F38ec5A75acCEc50054671233dfAC9C0E7A3F6"
-const BRIDGE_VALIDATOR_ADDRESS = "0xed84a648b3c51432ad0fD1C2cD2C45677E9d4064"
-const HASHI_TARGET_CHAIN_ID = 100
+const HOME_AMB_PROXY_ADDRESS = "0x75Df5AF045d91108662D8080fD1FEFAd6aA0bb59"
+const OWNER_ADDRESS = "0x7a48dac683da91e4faa5ab13d91ab5fd170875bd"
+const BRIDGE_VALIDATOR_ADDRESS = "0xa280fed8d7cad9a76c8b50ca5c33c2534ffa5008"
+const HASHI_TARGET_CHAIN_ID = 1
 const HASHI_THRESHOLD = 2
 const MESSAGE_PACKING_VERSION = "00050000"
 
-// NOTE: be sure to run this in a mainnet forked environment
-describe("ForeignAMB", () => {
-  let foreignAmb,
+// NOTE: be sure to run this in a gnosis chain forked environment
+describe("HomeAMB", () => {
+  let homeAmb,
     proxy,
     fakeReceiver,
     fakeReporter1,
@@ -52,29 +52,29 @@ describe("ForeignAMB", () => {
       value: ethers.parseEther("1"),
     })
 
-    const ForeignAMB = await ethers.getContractFactory("ForeignAMB")
+    const HomeAMB = await ethers.getContractFactory("HomeAMB")
     const OwnedUpgradeabilityProxy = await ethers.getContractFactory("OwnedUpgradeabilityProxy")
     const BridgeValidators = await ethers.getContractFactory("BridgeValidators")
     const MockYaho = await ethers.getContractFactory("MockYaho")
     const MockYaru = await ethers.getContractFactory("MockYaru")
 
-    proxy = await OwnedUpgradeabilityProxy.attach(FOREIGN_AMB_PROXY_ADDRESS)
+    proxy = await OwnedUpgradeabilityProxy.attach(HOME_AMB_PROXY_ADDRESS)
     bridgeValidators = await BridgeValidators.attach(BRIDGE_VALIDATOR_ADDRESS)
 
-    foreignAmb = await ForeignAMB.deploy()
-    await proxy.connect(proxyOwner).upgradeTo("6", await foreignAmb.getAddress())
-    foreignAmb = ForeignAMB.attach(await proxy.getAddress())
+    homeAmb = await HomeAMB.deploy()
+    await proxy.connect(proxyOwner).upgradeTo("6", await homeAmb.getAddress())
+    homeAmb = HomeAMB.attach(await proxy.getAddress())
 
     yaho = await MockYaho.deploy()
     yaru = await MockYaru.deploy(HASHI_TARGET_CHAIN_ID)
 
-    await foreignAmb.connect(proxyOwner).setHashiTargetChainId(HASHI_TARGET_CHAIN_ID)
-    await foreignAmb.connect(proxyOwner).setHashiThreshold(HASHI_THRESHOLD)
-    await foreignAmb.connect(proxyOwner).setHashiReporters([fakeReporter1.address, fakeReporter2.address])
-    await foreignAmb.connect(proxyOwner).setHashiAdapters([fakeAdapter1.address, fakeAdapter2.address])
-    await foreignAmb.connect(proxyOwner).setYaho(await yaho.getAddress())
-    await foreignAmb.connect(proxyOwner).setTargetAmb(fakeTargetAmb.address)
-    await foreignAmb.connect(proxyOwner).setYaru(await yaru.getAddress())
+    await homeAmb.connect(proxyOwner).setHashiTargetChainId(HASHI_TARGET_CHAIN_ID)
+    await homeAmb.connect(proxyOwner).setHashiThreshold(HASHI_THRESHOLD)
+    await homeAmb.connect(proxyOwner).setHashiReporters([fakeReporter1.address, fakeReporter2.address])
+    await homeAmb.connect(proxyOwner).setHashiAdapters([fakeAdapter1.address, fakeAdapter2.address])
+    await homeAmb.connect(proxyOwner).setYaho(await yaho.getAddress())
+    await homeAmb.connect(proxyOwner).setTargetAmb(fakeTargetAmb.address)
+    await homeAmb.connect(proxyOwner).setYaru(await yaru.getAddress())
 
     // NOTE: Add fake validators in order to be able to sign the message
     await bridgeValidators.connect(proxyOwner).addValidator(validator1.address)
@@ -83,13 +83,10 @@ describe("ForeignAMB", () => {
   })
 
   it("should be able to send a message using hashi", async () => {
-    await expect(foreignAmb.requireToPassMessage(fakeReceiver.address, "0x01", 200000)).to.emit(
-      yaho,
-      "MessageDispatched",
-    )
+    await expect(homeAmb.requireToPassMessage(fakeReceiver.address, "0x01", 200000)).to.emit(yaho, "MessageDispatched")
   })
 
-  it("should be able to execute signatures only once after hashi approval", async () => {
+  it("should be able to execute an affirmation only once after hashi approval", async () => {
     const msgId = "0x" + MESSAGE_PACKING_VERSION.padEnd(63, "0") + "1"
     const message =
       `${msgId}${strip0x(await yaho.getAddress())}` + // sender
@@ -98,29 +95,23 @@ describe("ForeignAMB", () => {
       "01" + // source chain id length
       "01" + // destination chain id length
       "00" + // dataType
-      "64" + // source chain id
-      "01" + // destination chain id
+      "01" + // source chain id
+      "64" + // destination chain id
       "11" // data
 
-    const signatures = await Promise.all(
-      [validator1, validator2].map((_validator) => _validator.signMessage(append0(ethers.toBeArray(message)))),
-    )
-
-    const packedSignatures = packSignatures(signatures.map((_sig) => signatureToVrs(_sig)))
-    await expect(foreignAmb.executeSignatures(message, packedSignatures)).to.be.reverted
+    await homeAmb.connect(validator1).executeAffirmation(message)
+    await homeAmb.connect(validator2).executeAffirmation(message)
 
     const hashiMessage = [
       1, // nonce
-      1, // target chain id
+      100, // target chain id
       2, // threshold
       fakeTargetAmb.address,
-      await foreignAmb.getAddress(), // receiver
+      await homeAmb.getAddress(), // receiver
       message,
       [fakeReporter1, fakeReporter2].map(({ address }) => address),
       [fakeAdapter1, fakeAdapter2].map(({ address }) => address),
     ]
-    await yaru.executeMessages([hashiMessage])
-    await expect(foreignAmb.executeSignatures(message, packedSignatures)).to.emit(foreignAmb, "RelayedMessage")
-    await expect(foreignAmb.executeSignatures(message, packedSignatures)).to.be.reverted
+    await expect(yaru.executeMessages([hashiMessage])).to.emit(homeAmb, "AffirmationCompleted")
   })
 })
