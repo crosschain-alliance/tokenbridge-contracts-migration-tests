@@ -1,7 +1,5 @@
 pragma solidity ^0.8.20;
 
-import "hardhat/console.sol";
-
 interface IAdapter {
     function getHash(uint256 domain, uint256 id) external view returns (bytes32 hash);
 }
@@ -66,11 +64,9 @@ contract MockYaho {
         messageIds[0] = messageId;
         messageHashes[0] = mockMessageHash;
 
-        console.log(reporters.length, adapters.length, threshold);
-
         bytes32[] memory receipts = new bytes32[](reporters.length);
         for (uint256 i = 0; i < reporters.length; i++) {
-            receipts[i] = reporters[i].dispatchMessages(targetChainId, adapters[i], messageIds, messageHashes);
+            receipts[i] = bytes32(i);
         }
 
         emit MessageDispatched(messageId, message);
