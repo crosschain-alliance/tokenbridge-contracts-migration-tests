@@ -5,6 +5,7 @@
   "main": "index.js",
   "scripts": {
     "test": "npx hardhat test",
+    "postinstall": "patch-package",
     "prettier:write": "prettier --write \"**/*.{js,json,md,sol,ts,yml}\""
   },
   "author": "alle.manfredi@gmail.com",
@@ -17,7 +18,9 @@
     "@openzeppelin/hardhat-upgrades": "^3.0.5",
     "dotenv": "^16.4.5",
     "hardhat": "^2.22.2",
+    "hardhat-change-network": "^0.0.7",
     "openzeppelin-solidity": "1.12.0",
+    "patch-package": "^8.0.0",
     "prettier": "^2.8.7",
     "prettier-plugin-solidity": "^1.0.0"
   }

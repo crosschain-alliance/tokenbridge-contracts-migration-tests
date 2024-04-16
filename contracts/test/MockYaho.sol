@@ -33,9 +33,9 @@ contract MockYaho {
         IAdapter[] adapters;
     }
 
-    event MessageDispatched(uint256 messageId, Message message);
+    event MessageDispatched(uint256 indexed messageId, Message message);
 
-    function dispatchMessageToAdapters(
+    function dispatchMessage(
         uint256 targetChainId,
         uint256 threshold,
         address receiver,

@@ -1,6 +1,9 @@
 require("@nomicfoundation/hardhat-toolbox")
 require("@openzeppelin/hardhat-upgrades")
+require("hardhat-change-network")
 require("dotenv").config()
+
+require("./tasks/amb-e2e.js")
 
 module.exports = {
   networks: {
@@ -9,6 +12,22 @@ module.exports = {
         url: process.env.GNOSIS_JSON_RPC_URL, //process.env.MAINNET_JSON_RPC_URL,
       },
       chainId: 1,
+    },
+    gnosis: {
+      accounts: [process.env.PRIVATE_KEY],
+      chainId: 1,
+      url: process.env.GNOSIS_JSON_RPC_URL,
+    },
+    mainnet: {
+      accounts: [process.env.PRIVATE_KEY],
+      chainId: 1,
+      url: process.env.MAINNET_JSON_RPC_URL,
+    },
+    fmainnet: {
+      url: "http://127.0.0.1:8545",
+    },
+    fgnosis: {
+      url: "http://127.0.0.1:8544",
     },
   },
   solidity: {
