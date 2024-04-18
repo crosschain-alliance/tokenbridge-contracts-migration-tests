@@ -73,7 +73,7 @@ describe("ForeignAMB", () => {
     await foreignAmb.connect(proxyOwner).setHashiReporters([fakeReporter1.address, fakeReporter2.address])
     await foreignAmb.connect(proxyOwner).setHashiAdapters([fakeAdapter1.address, fakeAdapter2.address])
     await foreignAmb.connect(proxyOwner).setYaho(await yaho.getAddress())
-    await foreignAmb.connect(proxyOwner).setTargetAmb(fakeTargetAmb.address)
+    await foreignAmb.connect(proxyOwner).setHashiTargetAddress(fakeTargetAmb.address)
     await foreignAmb.connect(proxyOwner).setYaru(await yaru.getAddress())
 
     // NOTE: Add fake validators in order to be able to sign the message
