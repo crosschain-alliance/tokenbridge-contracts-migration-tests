@@ -1,9 +1,11 @@
 const { ethers } = require("hardhat")
 const { expect } = require("chai")
 
+const { packSignatures, signatureToVrs, append0 } = require("./utils")
+
 const FOREIGN_XDAI_PROXY_ADDRESS = "0x4aa42145Aa6Ebf72e164C9bBC74fbD3788045016"
 const OWNER_ADDRESS = "0x42F38ec5A75acCEc50054671233dfAC9C0E7A3F6"
-const BRIDGE_VALIDATOR_ADDRESS = "0xed84a648b3c51432ad0fD1C2cD2C45677E9d4064"
+const BRIDGE_VALIDATOR_ADDRESS = "0xe1579dEbdD2DF16Ebdb9db8694391fa74EeA201E"
 const HASHI_TARGET_CHAIN_ID = 100
 const HASHI_THRESHOLD = 2
 const DAI_ADDRESS = "0x6B175474E89094C44Da98b954EedeAC495271d0F"
@@ -21,7 +23,7 @@ describe("ForeignBridgeErcToNative", () => {
     validator1,
     validator2,
     bridgeValidators,
-    fakeTargetAmb,
+    fakeTargetForeignBridgeErcToNative,
     dai
 
   before(async () => {
@@ -47,7 +49,7 @@ describe("ForeignBridgeErcToNative", () => {
     fakeAdapter2 = signers[5]
     validator1 = signers[6]
     validator2 = signers[7]
-    fakeTargetAmb = signers[8]
+    fakeTargetForeignBridgeErcToNative = signers[8]
     sender = signers[9]
     receiver = signers[10]
 
@@ -78,7 +80,7 @@ describe("ForeignBridgeErcToNative", () => {
     await foreignBridgeErcToNative.connect(proxyOwner).setHashiReporters([fakeReporter1.address, fakeReporter2.address])
     await foreignBridgeErcToNative.connect(proxyOwner).setHashiAdapters([fakeAdapter1.address, fakeAdapter2.address])
     await foreignBridgeErcToNative.connect(proxyOwner).setYaho(await yaho.getAddress())
-    await foreignBridgeErcToNative.connect(proxyOwner).setTargetAmb(fakeTargetAmb.address)
+    await foreignBridgeErcToNative.connect(proxyOwner).setHashiTargetAddress(fakeTargetForeignBridgeErcToNative.address)
     await foreignBridgeErcToNative.connect(proxyOwner).setYaru(await yaru.getAddress())
 
     // NOTE: Add fake validators in order to be able to sign the message
@@ -94,5 +96,35 @@ describe("ForeignBridgeErcToNative", () => {
     const amount = ethers.parseUnits("10", 18)
     await dai.approve(await foreignBridgeErcToNative.getAddress(), amount)
     await expect(foreignBridgeErcToNative.relayTokens(fakeReceiver.address, amount)).to.emit(yaho, "MessageDispatched")
+  })
+
+  it("should be able to release 10 only once after hashi approval", async () => {
+    const amount = ethers.parseEther("10")
+    const nonce = ethers.toBeHex(1, 32)
+    const message = ethers.solidityPacked(
+      ["address", "uint256", "bytes32", "address"],
+      [fakeReceiver.address, amount, nonce, await foreignBridgeErcToNative.getAddress()],
+    )
+
+    const signatures = await Promise.all(
+      [validator1, validator2].map((_validator) => _validator.signMessage(ethers.toBeArray(message))),
+    )
+    const packedSignatures = packSignatures(signatures.map((_sig) => signatureToVrs(_sig)))
+    await expect(foreignBridgeErcToNative.executeSignatures(message, packedSignatures)).to.be.reverted
+
+    await yaru.executeMessages([
+      [
+        1,
+        HASHI_TARGET_CHAIN_ID,
+        2,
+        fakeTargetForeignBridgeErcToNative.address,
+        await foreignBridgeErcToNative.getAddress(),
+        ethers.solidityPacked(["address", "uint256", "bytes32"], [fakeReceiver.address, amount, nonce]),
+        [fakeReporter1, fakeReporter2].map(({ address }) => address),
+        [fakeAdapter1, fakeAdapter2].map(({ address }) => address),
+      ],
+    ])
+    await expect(foreignBridgeErcToNative.executeSignatures(message, packedSignatures)).to.emit(dai, "Transfer")
+    await expect(foreignBridgeErcToNative.executeSignatures(message, packedSignatures)).to.be.reverted
   })
 })
