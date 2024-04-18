@@ -154,8 +154,8 @@ task("AMB:e2e").setAction(async (_taskArgs, hre) => {
   await homeBridgeValidators.connect(homeProxyOwner).setRequiredSignatures(2)
 
   // NOTE: linking the 2 amb contracts
-  await foreignAmb.connect(foreignProxyOwner).setTargetAmb(await homeAmb.getAddress())
-  await homeAmb.connect(homeProxyOwner).setTargetAmb(await foreignAmb.getAddress())
+  await foreignAmb.connect(foreignProxyOwner).setHashiTargetAddress(await homeAmb.getAddress())
+  await homeAmb.connect(homeProxyOwner).setHashiTargetAddress(await foreignAmb.getAddress())
 
   // E T H E R E U M   --->   G N O S I S
   await hre.changeNetwork("fmainnet")
