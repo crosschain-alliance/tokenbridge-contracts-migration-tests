@@ -20,7 +20,7 @@ describe("HomeBridgeErcToNative", () => {
     validator1,
     validator2,
     bridgeValidators,
-    fakeTargetAmb,
+    fakeTargetHomeBridgeErcToNative,
     owner
 
   before(async () => {
@@ -46,7 +46,7 @@ describe("HomeBridgeErcToNative", () => {
     fakeAdapter2 = signers[5]
     validator1 = signers[6]
     validator2 = signers[7]
-    fakeTargetAmb = signers[8]
+    fakeTargetHomeBridgeErcToNative = signers[8]
     sender = signers[9]
     receiver = signers[10]
 
@@ -80,7 +80,7 @@ describe("HomeBridgeErcToNative", () => {
     await homeBridgeErcToNative.connect(proxyOwner).setHashiReporters([fakeReporter1.address, fakeReporter2.address])
     await homeBridgeErcToNative.connect(proxyOwner).setHashiAdapters([fakeAdapter1.address, fakeAdapter2.address])
     await homeBridgeErcToNative.connect(proxyOwner).setYaho(await yaho.getAddress())
-    await homeBridgeErcToNative.connect(proxyOwner).setHashiTargetAddress(fakeTargetAmb.address)
+    await homeBridgeErcToNative.connect(proxyOwner).setHashiTargetAddress(fakeTargetHomeBridgeErcToNative.address)
     await homeBridgeErcToNative.connect(proxyOwner).setYaru(await yaru.getAddress())
 
     // NOTE: Add fake validators in order to be able to sign the message
@@ -102,7 +102,7 @@ describe("HomeBridgeErcToNative", () => {
           1, // hashi nonce
           100, // target chain id
           2, // threshold
-          fakeTargetAmb.address,
+          fakeTargetHomeBridgeErcToNative.address,
           await homeBridgeErcToNative.getAddress(), // receiver
           message,
           [fakeReporter1, fakeReporter2].map(({ address }) => address),
@@ -125,7 +125,7 @@ describe("HomeBridgeErcToNative", () => {
           1, // hashi nonce
           100, // target chain id
           2, // threshold
-          fakeTargetAmb.address,
+          fakeTargetHomeBridgeErcToNative.address,
           await homeBridgeErcToNative.getAddress(), // receiver
           message,
           [fakeReporter1, fakeReporter2].map(({ address }) => address),
