@@ -38,7 +38,6 @@ task("AMB:e2e").setAction(async (_taskArgs, hre) => {
   let PingPong = await ethers.getContractFactory("PingPong")
 
   // M A I N N E T
-  await hre.changeNetwork("fmainnet")
   await network.provider.request({
     method: "hardhat_impersonateAccount",
     params: [FOREIGN_OWNER_ADDRESS],
