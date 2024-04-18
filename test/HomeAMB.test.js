@@ -102,16 +102,19 @@ describe("HomeAMB", () => {
     await homeAmb.connect(validator1).executeAffirmation(message)
     await homeAmb.connect(validator2).executeAffirmation(message)
 
-    const hashiMessage = [
-      1, // nonce
-      100, // target chain id
-      2, // threshold
-      fakeTargetAmb.address,
-      await homeAmb.getAddress(), // receiver
-      message,
-      [fakeReporter1, fakeReporter2].map(({ address }) => address),
-      [fakeAdapter1, fakeAdapter2].map(({ address }) => address),
-    ]
-    await expect(yaru.executeMessages([hashiMessage])).to.emit(homeAmb, "AffirmationCompleted")
+    await expect(
+      yaru.executeMessages([
+        [
+          1, // nonce
+          100, // target chain id
+          2, // threshold
+          fakeTargetAmb.address,
+          await homeAmb.getAddress(), // receiver
+          message,
+          [fakeReporter1, fakeReporter2].map(({ address }) => address),
+          [fakeAdapter1, fakeAdapter2].map(({ address }) => address),
+        ],
+      ]),
+    ).to.emit(homeAmb, "AffirmationCompleted")
   })
 })

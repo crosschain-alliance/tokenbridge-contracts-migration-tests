@@ -109,17 +109,18 @@ describe("ForeignAMB", () => {
     const packedSignatures = packSignatures(signatures.map((_sig) => signatureToVrs(_sig)))
     await expect(foreignAmb.executeSignatures(message, packedSignatures)).to.be.reverted
 
-    const hashiMessage = [
-      1, // nonce
-      1, // target chain id
-      2, // threshold
-      fakeTargetAmb.address,
-      await foreignAmb.getAddress(), // receiver
-      message,
-      [fakeReporter1, fakeReporter2].map(({ address }) => address),
-      [fakeAdapter1, fakeAdapter2].map(({ address }) => address),
-    ]
-    await yaru.executeMessages([hashiMessage])
+    await yaru.executeMessages([
+      [
+        1, // nonce
+        1, // target chain id
+        2, // threshold
+        fakeTargetAmb.address,
+        await foreignAmb.getAddress(), // receiver
+        message,
+        [fakeReporter1, fakeReporter2].map(({ address }) => address),
+        [fakeAdapter1, fakeAdapter2].map(({ address }) => address),
+      ],
+    ])
     await expect(foreignAmb.executeSignatures(message, packedSignatures)).to.emit(foreignAmb, "RelayedMessage")
     await expect(foreignAmb.executeSignatures(message, packedSignatures)).to.be.reverted
   })
