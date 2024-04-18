@@ -1,5 +1,7 @@
 const { task } = require("hardhat/config")
+
 const { packSignatures, signatureToVrs, append0 } = require("../test/utils/index")
+const { decodeHashiMessage } = require("./utils/hashi")
 
 const FOREIGN_AMB_PROXY_ADDRESS = "0x4C36d2919e407f0Cc2Ee3c993ccF8ac26d9CE64e"
 const FOREIGN_OWNER_ADDRESS = "0x42F38ec5A75acCEc50054671233dfAC9C0E7A3F6"
@@ -17,24 +19,6 @@ const USER_REQUEST_FOR_AFFIRMATION_TOPIC = "0x482515ce3d9494a37ce83f18b72b363449
 const USER_REQUEST_FOR_SIGNATURE = "0x520d2afde79cbd5db58755ac9480f81bc658e5c517fcae7365a3d832590b0183"
 
 const PING_PONG_NONCE = 1
-
-const decodeHashiMessage = (_message, { abiCoder }) => {
-  const [[nonce, targetChainId, threshold, sender, receiver, data, reporters, adapters]] = abiCoder.decode(
-    ["(uint256,uint256,uint256,address,address,bytes,address[],address[])"],
-    _message,
-  )
-
-  return [
-    nonce,
-    targetChainId,
-    threshold,
-    sender,
-    receiver,
-    data,
-    reporters.map((_reporter) => _reporter),
-    adapters.map((_adapter) => _adapter),
-  ]
-}
 
 /**
  * How to run this:
