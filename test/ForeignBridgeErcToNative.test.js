@@ -87,15 +87,12 @@ describe("ForeignBridgeErcToNative", () => {
     await bridgeValidators.connect(proxyOwner).setRequiredSignatures(2)
 
     dai = await Token.attach(DAI_ADDRESS)
-    await dai.connect(daiFaucet).transfer(owner.address, ethers.parseUnits('100000', 18))
+    await dai.connect(daiFaucet).transfer(owner.address, ethers.parseUnits("100000", 18))
   })
 
   it("should be able to relay 10 dai", async () => {
-    const amount = ethers.parseUnits('10', 18)
+    const amount = ethers.parseUnits("10", 18)
     await dai.approve(await foreignBridgeErcToNative.getAddress(), amount)
-    await expect(foreignBridgeErcToNative.relayTokens(fakeReceiver.address, amount)).to.emit(
-      yaho,
-      "MessageDispatched",
-    )
+    await expect(foreignBridgeErcToNative.relayTokens(fakeReceiver.address, amount)).to.emit(yaho, "MessageDispatched")
   })
 })
