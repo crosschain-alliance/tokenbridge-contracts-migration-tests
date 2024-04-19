@@ -4,12 +4,13 @@ require("hardhat-change-network")
 require("dotenv").config()
 
 require("./tasks/amb-e2e.js")
+require("./tasks/xdai-e2e.js")
 
 module.exports = {
   networks: {
     hardhat: {
       forking: {
-        url: process.env.GNOSIS_JSON_RPC_URL, //process.env.MAINNET_JSON_RPC_URL,
+        url: process.env.MAINNET_JSON_RPC_URL, //process.env.GNOSIS_JSON_RPC_URL,
       },
       chainId: 1,
     },
@@ -37,7 +38,7 @@ module.exports = {
         settings: {
           optimizer: {
             enabled: true,
-            runs: 200,
+            runs: 100, // NOTE: change to 100 when using HomeBridgeErcToNative
           },
           evmVersion: "byzantium",
         },
