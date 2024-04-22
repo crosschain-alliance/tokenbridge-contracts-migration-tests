@@ -24,7 +24,8 @@ describe("ForeignBridgeErcToNative", () => {
     validator2,
     bridgeValidators,
     fakeTargetForeignBridgeErcToNative,
-    dai
+    dai,
+    hashiManager
 
   before(async () => {
     await network.provider.request({
@@ -61,6 +62,8 @@ describe("ForeignBridgeErcToNative", () => {
     const ForeignBridgeErcToNative = await ethers.getContractFactory("ForeignBridgeErcToNative")
     const OwnedUpgradeabilityProxy = await ethers.getContractFactory("OwnedUpgradeabilityProxy")
     const BridgeValidators = await ethers.getContractFactory("BridgeValidators")
+    const HashiManager = await ethers.getContractFactory("HashiManager")
+    const EternalStorageProxy = await ethers.getContractFactory("EternalStorageProxy")
     const MockYaho = await ethers.getContractFactory("MockYaho")
     const MockYaru = await ethers.getContractFactory("MockYaru")
     const Token = await ethers.getContractFactory("Token")
@@ -75,13 +78,21 @@ describe("ForeignBridgeErcToNative", () => {
     yaho = await MockYaho.deploy()
     yaru = await MockYaru.deploy(HASHI_TARGET_CHAIN_ID)
 
-    await foreignBridgeErcToNative.connect(proxyOwner).setHashiTargetChainId(HASHI_TARGET_CHAIN_ID)
-    await foreignBridgeErcToNative.connect(proxyOwner).setHashiThreshold(HASHI_THRESHOLD)
-    await foreignBridgeErcToNative.connect(proxyOwner).setHashiReporters([fakeReporter1.address, fakeReporter2.address])
-    await foreignBridgeErcToNative.connect(proxyOwner).setHashiAdapters([fakeAdapter1.address, fakeAdapter2.address])
-    await foreignBridgeErcToNative.connect(proxyOwner).setYaho(await yaho.getAddress())
-    await foreignBridgeErcToNative.connect(proxyOwner).setHashiTargetAddress(fakeTargetForeignBridgeErcToNative.address)
-    await foreignBridgeErcToNative.connect(proxyOwner).setYaru(await yaru.getAddress())
+    hashiManager = await EternalStorageProxy.deploy()
+    const hashiManagerImp = await HashiManager.deploy()
+    await hashiManager.upgradeTo("1", await hashiManagerImp.getAddress())
+    await hashiManager.transferProxyOwnership(proxyOwner.address)
+    hashiManager = await HashiManager.attach(await hashiManager.getAddress())
+    await hashiManager.connect(proxyOwner).initialize(proxyOwner.address)
+
+    await foreignBridgeErcToNative.connect(proxyOwner).setHashiManager(await hashiManager.getAddress())
+    await hashiManager.connect(proxyOwner).setHashiTargetChainId(HASHI_TARGET_CHAIN_ID)
+    await hashiManager.connect(proxyOwner).setHashiThreshold(HASHI_THRESHOLD)
+    await hashiManager.connect(proxyOwner).setHashiReporters([fakeReporter1.address, fakeReporter2.address])
+    await hashiManager.connect(proxyOwner).setHashiAdapters([fakeAdapter1.address, fakeAdapter2.address])
+    await hashiManager.connect(proxyOwner).setYaho(await yaho.getAddress())
+    await hashiManager.connect(proxyOwner).setHashiTargetAddress(fakeTargetForeignBridgeErcToNative.address)
+    await hashiManager.connect(proxyOwner).setYaru(await yaru.getAddress())
 
     // NOTE: Add fake validators in order to be able to sign the message
     await bridgeValidators.connect(proxyOwner).addValidator(validator1.address)
