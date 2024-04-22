@@ -33,6 +33,8 @@ task("AMB:e2e").setAction(async (_taskArgs, hre) => {
   let ForeignAMB = await ethers.getContractFactory("ForeignAMB")
   let OwnedUpgradeabilityProxy = await ethers.getContractFactory("OwnedUpgradeabilityProxy")
   let BridgeValidators = await ethers.getContractFactory("BridgeValidators")
+  let HashiManager = await ethers.getContractFactory("HashiManager")
+  let EternalStorageProxy = await ethers.getContractFactory("EternalStorageProxy")
   let MockYaho = await ethers.getContractFactory("MockYaho")
   let MockYaru = await ethers.getContractFactory("MockYaru")
   let PingPong = await ethers.getContractFactory("PingPong")
@@ -69,16 +71,23 @@ task("AMB:e2e").setAction(async (_taskArgs, hre) => {
   const foreignYaru = await MockYaru.deploy(FOREIGN_HASHI_TARGET_CHAIN_ID)
   const foreignPingPong = await PingPong.deploy(await foreignAmb.getAddress())
 
-  await foreignAmb.connect(foreignProxyOwner).setHashiTargetChainId(FOREIGN_HASHI_TARGET_CHAIN_ID)
-  await foreignAmb.connect(foreignProxyOwner).setHashiThreshold(HASHI_THRESHOLD)
-  await foreignAmb
+  foreignHashiManager = await EternalStorageProxy.deploy()
+  const foreignHashiManagerImp = await HashiManager.deploy()
+  await foreignHashiManager.upgradeTo("1", await foreignHashiManagerImp.getAddress())
+  await foreignHashiManager.transferProxyOwnership(foreignProxyOwner.address)
+  foreignHashiManager = await HashiManager.attach(await foreignHashiManager.getAddress())
+  await foreignHashiManager.connect(foreignProxyOwner).initialize(foreignProxyOwner.address)
+  await foreignAmb.connect(foreignProxyOwner).setHashiManager(await foreignHashiManager.getAddress())
+  await foreignHashiManager.connect(foreignProxyOwner).setHashiTargetChainId(FOREIGN_HASHI_TARGET_CHAIN_ID)
+  await foreignHashiManager.connect(foreignProxyOwner).setHashiThreshold(HASHI_THRESHOLD)
+  await foreignHashiManager
     .connect(foreignProxyOwner)
     .setHashiReporters([foreignFakeReporter1.address, foreignFakeReporter2.address])
-  await foreignAmb
+  await foreignHashiManager
     .connect(foreignProxyOwner)
     .setHashiAdapters([foreignFakeAdapter1.address, foreignFakeAdapter2.address])
-  await foreignAmb.connect(foreignProxyOwner).setYaho(await foreignYaho.getAddress())
-  await foreignAmb.connect(foreignProxyOwner).setYaru(await foreignYaru.getAddress())
+  await foreignHashiManager.connect(foreignProxyOwner).setYaho(await foreignYaho.getAddress())
+  await foreignHashiManager.connect(foreignProxyOwner).setYaru(await foreignYaru.getAddress())
 
   // NOTE: Add fake validators in order to be able to sign the message
   await foreignBridgeValidators.connect(foreignProxyOwner).addValidator(foreignValidator1.address)
@@ -91,6 +100,8 @@ task("AMB:e2e").setAction(async (_taskArgs, hre) => {
   let HomeAMB = await ethers.getContractFactory("HomeAMB")
   OwnedUpgradeabilityProxy = await ethers.getContractFactory("OwnedUpgradeabilityProxy")
   BridgeValidators = await ethers.getContractFactory("BridgeValidators")
+  HashiManager = await ethers.getContractFactory("HashiManager")
+  EternalStorageProxy = await ethers.getContractFactory("EternalStorageProxy")
   MockYaho = await ethers.getContractFactory("MockYaho")
   MockYaru = await ethers.getContractFactory("MockYaru")
   PingPong = await ethers.getContractFactory("PingPong")
@@ -124,12 +135,21 @@ task("AMB:e2e").setAction(async (_taskArgs, hre) => {
   const homeYaru = await MockYaru.deploy(HOME_HASHI_TARGET_CHAIN_ID)
   const homePingPong = await PingPong.deploy(await homeAmb.getAddress())
 
-  await homeAmb.connect(homeProxyOwner).setHashiTargetChainId(HOME_HASHI_TARGET_CHAIN_ID)
-  await homeAmb.connect(homeProxyOwner).setHashiThreshold(HASHI_THRESHOLD)
-  await homeAmb.connect(homeProxyOwner).setHashiReporters([homeFakeReporter1.address, homeFakeReporter2.address])
-  await homeAmb.connect(homeProxyOwner).setHashiAdapters([homeFakeAdapter1.address, homeFakeAdapter2.address])
-  await homeAmb.connect(homeProxyOwner).setYaho(await homeYaho.getAddress())
-  await homeAmb.connect(homeProxyOwner).setYaru(await homeYaru.getAddress())
+  homeHashiManager = await EternalStorageProxy.deploy()
+  const homeHashiManagerImp = await HashiManager.deploy()
+  await homeHashiManager.upgradeTo("1", await homeHashiManagerImp.getAddress())
+  await homeHashiManager.transferProxyOwnership(homeProxyOwner.address)
+  homeHashiManager = await HashiManager.attach(await homeHashiManager.getAddress())
+  await homeHashiManager.connect(homeProxyOwner).initialize(homeProxyOwner.address)
+  await homeAmb.connect(homeProxyOwner).setHashiManager(await homeHashiManager.getAddress())
+  await homeHashiManager.connect(homeProxyOwner).setHashiTargetChainId(HOME_HASHI_TARGET_CHAIN_ID)
+  await homeHashiManager.connect(homeProxyOwner).setHashiThreshold(HASHI_THRESHOLD)
+  await homeHashiManager
+    .connect(homeProxyOwner)
+    .setHashiReporters([homeFakeReporter1.address, homeFakeReporter2.address])
+  await homeHashiManager.connect(homeProxyOwner).setHashiAdapters([homeFakeAdapter1.address, homeFakeAdapter2.address])
+  await homeHashiManager.connect(homeProxyOwner).setYaho(await homeYaho.getAddress())
+  await homeHashiManager.connect(homeProxyOwner).setYaru(await homeYaru.getAddress())
 
   // NOTE: Add fake validators in order to be able to sign the message
   await homeBridgeValidators.connect(homeProxyOwner).addValidator(homeValidator1.address)
@@ -137,8 +157,8 @@ task("AMB:e2e").setAction(async (_taskArgs, hre) => {
   await homeBridgeValidators.connect(homeProxyOwner).setRequiredSignatures(2)
 
   // NOTE: linking the 2 amb contracts
-  await foreignAmb.connect(foreignProxyOwner).setHashiTargetAddress(await homeAmb.getAddress())
-  await homeAmb.connect(homeProxyOwner).setHashiTargetAddress(await foreignAmb.getAddress())
+  await foreignHashiManager.connect(foreignProxyOwner).setHashiTargetAddress(await homeAmb.getAddress())
+  await homeHashiManager.connect(homeProxyOwner).setHashiTargetAddress(await foreignAmb.getAddress())
 
   // E T H E R E U M   --->   G N O S I S
   await hre.changeNetwork("fmainnet")

@@ -23,7 +23,7 @@ describe("HomeAMB", () => {
     validator2,
     bridgeValidators,
     fakeTargetAmb,
-    sender,
+    hashiManager,
     receiver
 
   before(async () => {
@@ -55,6 +55,8 @@ describe("HomeAMB", () => {
     const HomeAMB = await ethers.getContractFactory("HomeAMB")
     const OwnedUpgradeabilityProxy = await ethers.getContractFactory("OwnedUpgradeabilityProxy")
     const BridgeValidators = await ethers.getContractFactory("BridgeValidators")
+    const HashiManager = await ethers.getContractFactory("HashiManager")
+    const EternalStorageProxy = await ethers.getContractFactory("EternalStorageProxy")
     const MockYaho = await ethers.getContractFactory("MockYaho")
     const MockYaru = await ethers.getContractFactory("MockYaru")
 
@@ -68,13 +70,21 @@ describe("HomeAMB", () => {
     yaho = await MockYaho.deploy()
     yaru = await MockYaru.deploy(HASHI_TARGET_CHAIN_ID)
 
-    await homeAmb.connect(proxyOwner).setHashiTargetChainId(HASHI_TARGET_CHAIN_ID)
-    await homeAmb.connect(proxyOwner).setHashiThreshold(HASHI_THRESHOLD)
-    await homeAmb.connect(proxyOwner).setHashiReporters([fakeReporter1.address, fakeReporter2.address])
-    await homeAmb.connect(proxyOwner).setHashiAdapters([fakeAdapter1.address, fakeAdapter2.address])
-    await homeAmb.connect(proxyOwner).setYaho(await yaho.getAddress())
-    await homeAmb.connect(proxyOwner).setHashiTargetAddress(fakeTargetAmb.address)
-    await homeAmb.connect(proxyOwner).setYaru(await yaru.getAddress())
+    hashiManager = await EternalStorageProxy.deploy()
+    const hashiManagerImp = await HashiManager.deploy()
+    await hashiManager.upgradeTo("1", await hashiManagerImp.getAddress())
+    await hashiManager.transferProxyOwnership(proxyOwner.address)
+    hashiManager = await HashiManager.attach(await hashiManager.getAddress())
+    await hashiManager.connect(proxyOwner).initialize(proxyOwner.address)
+
+    await homeAmb.connect(proxyOwner).setHashiManager(await hashiManager.getAddress())
+    await hashiManager.connect(proxyOwner).setHashiTargetChainId(HASHI_TARGET_CHAIN_ID)
+    await hashiManager.connect(proxyOwner).setHashiThreshold(HASHI_THRESHOLD)
+    await hashiManager.connect(proxyOwner).setHashiReporters([fakeReporter1.address, fakeReporter2.address])
+    await hashiManager.connect(proxyOwner).setHashiAdapters([fakeAdapter1.address, fakeAdapter2.address])
+    await hashiManager.connect(proxyOwner).setYaho(await yaho.getAddress())
+    await hashiManager.connect(proxyOwner).setHashiTargetAddress(fakeTargetAmb.address)
+    await hashiManager.connect(proxyOwner).setYaru(await yaru.getAddress())
 
     // NOTE: Add fake validators in order to be able to sign the message
     await bridgeValidators.connect(proxyOwner).addValidator(validator1.address)
