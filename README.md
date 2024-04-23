@@ -1,6 +1,31 @@
 # tokenbridge-contracts-migration-tests
 
-## How to e2e test AMB
+Gnosis Bridge Hashi integration tests.
+
+&nbsp;
+
+---
+
+&nbsp;
+
+## Dependencies
+
+```bash
+git submodule init
+git submodule update
+npm install
+```
+
+&nbsp;
+
+---
+
+&nbsp;
+
+
+## E2E test
+
+### AMB
 
 ```bash
 cd tokenbridge-contracts
@@ -12,7 +37,7 @@ npx hardhat node --fork <your-gnosis-node> --port 8544
 npx hardhat AMB:e2e --network fmainnet
 ```
 
-## How to e2e test XDAI bridge
+### xDAI Bridge
 
 ```bash
 cd tokenbridge-contracts
