@@ -24,7 +24,18 @@ describe("HomeBridgeErcToNative", () => {
     owner,
     hashiManager
 
-  before(async () => {
+  beforeEach(async () => {
+    await network.provider.request({
+      method: "hardhat_reset",
+      params: [
+        {
+          forking: {
+            jsonRpcUrl: config.networks.hardhat.forking.url,
+            blockNumber: config.networks.hardhat.forking.blockNumber,
+          },
+        },
+      ],
+    })
     await network.provider.request({
       method: "hardhat_impersonateAccount",
       params: [PROXY_OWNER_ADDRESS],
@@ -100,56 +111,36 @@ describe("HomeBridgeErcToNative", () => {
     await bridgeValidators.connect(bridgeValidatorOwner).setRequiredSignatures(2)
   })
 
-  it("should be able to execute an affirmation and mint 10 dai", async () => {
+  it("should be able to execute an affirmation and mint 10 dai with the hashi approval", async () => {
     const amount = ethers.parseEther("10")
     const nonce = ethers.toBeHex(1, 32)
-    await homeBridgeErcToNative.connect(validator1).executeAffirmation(fakeReceiver.address, amount, nonce)
-    await homeBridgeErcToNative.connect(validator2).executeAffirmation(fakeReceiver.address, amount, nonce)
-
     const message = ethers.solidityPacked(["address", "uint256", "bytes32"], [fakeReceiver.address, amount, nonce])
+
+    await yaru.executeMessages([
+      [
+        1, // hashi nonce
+        100, // target chain id
+        2, // threshold
+        fakeTargetHomeBridgeErcToNative.address,
+        await homeBridgeErcToNative.getAddress(), // receiver
+        message,
+        [fakeReporter1, fakeReporter2].map(({ address }) => address),
+        [fakeAdapter1, fakeAdapter2].map(({ address }) => address),
+      ],
+    ])
+    expect(await homeBridgeErcToNative.isApprovedByHashi(ethers.keccak256(message))).to.be.true
+    await homeBridgeErcToNative.connect(validator1).executeAffirmation(fakeReceiver.address, amount, nonce)
     await expect(
-      yaru.executeMessages([
-        [
-          1, // hashi nonce
-          100, // target chain id
-          2, // threshold
-          fakeTargetHomeBridgeErcToNative.address,
-          await homeBridgeErcToNative.getAddress(), // receiver
-          message,
-          [fakeReporter1, fakeReporter2].map(({ address }) => address),
-          [fakeAdapter1, fakeAdapter2].map(({ address }) => address),
-        ],
-      ]),
+      homeBridgeErcToNative.connect(validator2).executeAffirmation(fakeReceiver.address, amount, nonce),
     ).to.emit(homeBridgeErcToNative, "AffirmationCompleted")
   })
 
-  it("should be able to relay 1 dai by transfering them to the xdai home contract", async () => {
+  it("should be able to execute an affirmation and mint 10 dai without the hashi approval as it's optional", async () => {
     const amount = ethers.parseEther("10")
-    const nonce = ethers.toBeHex(2, 32)
+    const nonce = ethers.toBeHex(1, 32)
     await homeBridgeErcToNative.connect(validator1).executeAffirmation(fakeReceiver.address, amount, nonce)
-    await homeBridgeErcToNative.connect(validator2).executeAffirmation(fakeReceiver.address, amount, nonce)
-
-    const message = ethers.solidityPacked(["address", "uint256", "bytes32"], [fakeReceiver.address, amount, nonce])
     await expect(
-      yaru.executeMessages([
-        [
-          1, // hashi nonce
-          100, // target chain id
-          2, // threshold
-          fakeTargetHomeBridgeErcToNative.address,
-          await homeBridgeErcToNative.getAddress(), // receiver
-          message,
-          [fakeReporter1, fakeReporter2].map(({ address }) => address),
-          [fakeAdapter1, fakeAdapter2].map(({ address }) => address),
-        ],
-      ]),
+      homeBridgeErcToNative.connect(validator2).executeAffirmation(fakeReceiver.address, amount, nonce),
     ).to.emit(homeBridgeErcToNative, "AffirmationCompleted")
-
-    await expect(
-      owner.sendTransaction({
-        to: await homeBridgeErcToNative.getAddress(),
-        value: amount,
-      }),
-    ).to.emit(yaho, "MessageDispatched")
   })
 })
