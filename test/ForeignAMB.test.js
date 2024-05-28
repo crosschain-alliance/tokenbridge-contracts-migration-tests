@@ -26,7 +26,18 @@ describe("ForeignAMB", () => {
     hashiManager,
     receiver
 
-  before(async () => {
+  beforeEach(async () => {
+    await network.provider.request({
+      method: "hardhat_reset",
+      params: [
+        {
+          forking: {
+            jsonRpcUrl: config.networks.hardhat.forking.url,
+            blockNumber: config.networks.hardhat.forking.blockNumber,
+          },
+        },
+      ],
+    })
     await network.provider.request({
       method: "hardhat_impersonateAccount",
       params: [OWNER_ADDRESS],
@@ -99,7 +110,7 @@ describe("ForeignAMB", () => {
     )
   })
 
-  it("should be able to execute signatures only once after hashi approval", async () => {
+  it("should be able to executeSignatures even without Hashi approval as it's optional", async () => {
     const msgId = "0x" + MESSAGE_PACKING_VERSION.padEnd(63, "0") + "1"
     const message =
       `${msgId}${strip0x(await yaho.getAddress())}` + // sender
@@ -117,7 +128,22 @@ describe("ForeignAMB", () => {
     )
 
     const packedSignatures = packSignatures(signatures.map((_sig) => signatureToVrs(_sig)))
+    await expect(foreignAmb.executeSignatures(message, packedSignatures)).to.emit(foreignAmb, "RelayedMessage")
     await expect(foreignAmb.executeSignatures(message, packedSignatures)).to.be.reverted
+  })
+
+  it("should be able to executeSignatures with Hashi approval", async () => {
+    const msgId = "0x" + MESSAGE_PACKING_VERSION.padEnd(63, "0") + "1"
+    const message =
+      `${msgId}${strip0x(await yaho.getAddress())}` + // sender
+      `${strip0x(receiver.address)}` + // contractAddress
+      "001E8480" + // gasLimit
+      "01" + // source chain id length
+      "01" + // destination chain id length
+      "00" + // dataType
+      "64" + // source chain id
+      "01" + // destination chain id
+      "11" // data
 
     await yaru.executeMessages([
       [
@@ -131,6 +157,12 @@ describe("ForeignAMB", () => {
         [fakeAdapter1, fakeAdapter2].map(({ address }) => address),
       ],
     ])
+    expect(await foreignAmb.isApprovedByHashi(msgId)).to.be.true
+
+    const signatures = await Promise.all(
+      [validator1, validator2].map((_validator) => _validator.signMessage(append0(ethers.toBeArray(message)))),
+    )
+    const packedSignatures = packSignatures(signatures.map((_sig) => signatureToVrs(_sig)))
     await expect(foreignAmb.executeSignatures(message, packedSignatures)).to.emit(foreignAmb, "RelayedMessage")
     await expect(foreignAmb.executeSignatures(message, packedSignatures)).to.be.reverted
   })

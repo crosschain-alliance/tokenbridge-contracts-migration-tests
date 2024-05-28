@@ -1,4 +1,4 @@
-const { ethers } = require("hardhat")
+const { ethers, config } = require("hardhat")
 const { expect } = require("chai")
 
 const { strip0x } = require("./utils")
@@ -26,7 +26,18 @@ describe("HomeAMB", () => {
     hashiManager,
     receiver
 
-  before(async () => {
+  beforeEach(async () => {
+    await network.provider.request({
+      method: "hardhat_reset",
+      params: [
+        {
+          forking: {
+            jsonRpcUrl: config.networks.hardhat.forking.url,
+            blockNumber: config.networks.hardhat.forking.blockNumber,
+          },
+        },
+      ],
+    })
     await network.provider.request({
       method: "hardhat_impersonateAccount",
       params: [OWNER_ADDRESS],
@@ -96,7 +107,7 @@ describe("HomeAMB", () => {
     await expect(homeAmb.requireToPassMessage(fakeReceiver.address, "0x01", 200000)).to.emit(yaho, "MessageDispatched")
   })
 
-  it("should be able to execute an affirmation only once after hashi approval", async () => {
+  it("should be able to execute an affirmation even without the Hashi approval as it's optional", async () => {
     const msgId = "0x" + MESSAGE_PACKING_VERSION.padEnd(63, "0") + "1"
     const message =
       `${msgId}${strip0x(await yaho.getAddress())}` + // sender
@@ -110,21 +121,36 @@ describe("HomeAMB", () => {
       "11" // data
 
     await homeAmb.connect(validator1).executeAffirmation(message)
-    await homeAmb.connect(validator2).executeAffirmation(message)
+    await expect(homeAmb.connect(validator2).executeAffirmation(message)).to.emit(homeAmb, "AffirmationCompleted")
+  })
 
-    await expect(
-      yaru.executeMessages([
-        [
-          1, // nonce
-          100, // target chain id
-          2, // threshold
-          fakeTargetAmb.address,
-          await homeAmb.getAddress(), // receiver
-          message,
-          [fakeReporter1, fakeReporter2].map(({ address }) => address),
-          [fakeAdapter1, fakeAdapter2].map(({ address }) => address),
-        ],
-      ]),
-    ).to.emit(homeAmb, "AffirmationCompleted")
+  it("should be able to execute an affirmation with a validator after that an affirmation has been confirmed by hashi", async () => {
+    const msgId = "0x" + MESSAGE_PACKING_VERSION.padEnd(63, "0") + "1"
+    const message =
+      `${msgId}${strip0x(await yaho.getAddress())}` + // sender
+      `${strip0x(receiver.address)}` + // contractAddress
+      "001E8480" + // gasLimit
+      "01" + // source chain id length
+      "01" + // destination chain id length
+      "00" + // dataType
+      "01" + // source chain id
+      "64" + // destination chain id
+      "11" // data
+
+    await homeAmb.connect(validator1).executeAffirmation(message)
+    await yaru.executeMessages([
+      [
+        1, // nonce
+        100, // target chain id
+        2, // threshold
+        fakeTargetAmb.address,
+        await homeAmb.getAddress(), // receiver
+        message,
+        [fakeReporter1, fakeReporter2].map(({ address }) => address),
+        [fakeAdapter1, fakeAdapter2].map(({ address }) => address),
+      ],
+    ])
+    expect(await homeAmb.isApprovedByHashi(msgId)).to.be.true
+    await expect(homeAmb.connect(validator2).executeAffirmation(message)).to.emit(homeAmb, "AffirmationCompleted")
   })
 })
