@@ -173,9 +173,10 @@ task("AMB:e2e").setAction(async (_taskArgs, hre) => {
   await homePingPong.setTargetPingPong(await foreignPingPong.getAddress())
 
   await homeAmb.connect(homeValidator1).executeAffirmation(decodedForeignMessage)
-  await homeAmb.connect(homeValidator2).executeAffirmation(decodedForeignMessage)
-  // NOTE: if Hashi is enabled the handleMessage fx is invoked with Hashi message execution
   await homeYaru.executeMessages([decodeHashiMessage(foreignHashiMessage, { abiCoder })])
+  let msgId = decodedForeignMessage.slice(0, 66)
+  if (!(await homeAmb.isApprovedByHashi(msgId))) throw new Error("Hashi didn't execute the message")
+  await homeAmb.connect(homeValidator2).executeAffirmation(decodedForeignMessage)
 
   let lastReceivedNonce = await homePingPong.lastReceivedNonce()
   if (parseInt(lastReceivedNonce) !== PING_PONG_NONCE) throw new Error("Ops, lastReceivedNonce != PING_PONG_NONCE")
@@ -203,6 +204,8 @@ task("AMB:e2e").setAction(async (_taskArgs, hre) => {
   await hre.changeNetwork("fmainnet")
   // NOTE: if Hashi is enabled the handleMessage fx is invoked with Hashi message execution
   await foreignYaru.executeMessages([decodeHashiMessage(homeHashiMessage, { abiCoder })])
+  msgId = decodedHomeMessage.slice(0, 66)
+  if (!(await foreignAmb.isApprovedByHashi(msgId))) throw new Error("Hashi didn't execute the message")
   const packedSignatures = packSignatures(signatures.map((_sig) => signatureToVrs(_sig)))
   await foreignAmb.executeSignatures(decodedHomeMessage, packedSignatures)
   lastReceivedNonce = await foreignPingPong.lastReceivedNonce()

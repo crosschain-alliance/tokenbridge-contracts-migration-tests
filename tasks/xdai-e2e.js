@@ -8,7 +8,7 @@ const FOREIGN_BRIDGE_VALIDATOR_ADDRESS = "0xe1579dEbdD2DF16Ebdb9db8694391fa74EeA
 const FOREIGN_HASHI_TARGET_CHAIN_ID = 100
 const HASHI_THRESHOLD = 2
 const DAI_ADDRESS = "0x6B175474E89094C44Da98b954EedeAC495271d0F"
-const DAI_FAUCET_ADDRESS = "0x6FF8E4DB500cBd77d1D181B8908E022E29e0Ec4A"
+const DAI_FAUCET_ADDRESS = "0xD1668fB5F690C59Ab4B0CAbAd0f8C1617895052B"
 
 const HOME_XDAI_PROXY_ADDRESS = "0x7301CFA0e1756B71869E93d4e4Dca5c7d0eb0AA6"
 const HOME_PROXY_OWNER_ADDRESS = "0x7a48dac683da91e4faa5ab13d91ab5fd170875bd"
@@ -25,9 +25,8 @@ const ADDED_RECEIVER_TOPIC = "0x3c798bbcf33115b42c728b8504cff11dd58736e9fa789f1c
  * How to run this:
  * - npx hardhat node --fork <your-ethereum-node>
  * - npx hardhat node --fork <your-gnosis-node> --port 8544
- * - npx hardhat XDAIBridge:e2e --network fmainnet
+ * -
  *
- * Note: be sure to set the optimizer runs = 100
  */
 task("XDAIBridge:e2e").setAction(async (_taskArgs, hre) => {
   const { ethers, network } = hre
@@ -199,8 +198,11 @@ task("XDAIBridge:e2e").setAction(async (_taskArgs, hre) => {
 
   await hre.changeNetwork("fgnosis")
   await homeBridgeErcToNative.connect(homeValidator1).executeAffirmation(...foreignArgs)
-  await homeBridgeErcToNative.connect(homeValidator2).executeAffirmation(...foreignArgs)
-  tx = await homeYaru.executeMessages([decodeHashiMessage(foreignHashiMessage, { abiCoder })])
+  const decodedForeignHashiMessage = decodeHashiMessage(foreignHashiMessage, { abiCoder })
+  await homeYaru.executeMessages([decodedForeignHashiMessage])
+  if (!(await homeBridgeErcToNative.isApprovedByHashi(ethers.keccak256(decodedForeignHashiMessage[5]))))
+    throw new Error("Hashi didn't execute the message")
+  tx = await homeBridgeErcToNative.connect(homeValidator2).executeAffirmation(...foreignArgs)
   receipt = await tx.wait()
   const addedReceiverLog = receipt.logs.find((_log) => _log.topics[0] === ADDED_RECEIVER_TOPIC)
   if (!addedReceiverLog) throw new Error("Ops, AddedReceiver not found")
@@ -233,7 +235,10 @@ task("XDAIBridge:e2e").setAction(async (_taskArgs, hre) => {
 
   await hre.changeNetwork("fmainnet")
   const balancePre = await dai.balanceOf(homeOwner.address)
-  await foreignYaru.executeMessages([decodeHashiMessage(homeHashiMessage, { abiCoder })])
+  const decodedHomeHashiMessage = decodeHashiMessage(homeHashiMessage, { abiCoder })
+  await foreignYaru.executeMessages([decodedHomeHashiMessage])
+  if (!(await foreignBridgeErcToNative.isApprovedByHashi(ethers.keccak256(decodedHomeHashiMessage[5]))))
+    throw new Error("Hashi didn't execute the message")
   await foreignBridgeErcToNative.executeSignatures(
     homeMessageToSign,
     packSignatures(signatures.map((_sig) => signatureToVrs(_sig))),
