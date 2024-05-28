@@ -78,14 +78,14 @@ task("AMB:e2e").setAction(async (_taskArgs, hre) => {
   foreignHashiManager = await HashiManager.attach(await foreignHashiManager.getAddress())
   await foreignHashiManager.connect(foreignProxyOwner).initialize(foreignProxyOwner.address)
   await foreignAmb.connect(foreignProxyOwner).setHashiManager(await foreignHashiManager.getAddress())
-  await foreignHashiManager.connect(foreignProxyOwner).setHashiTargetChainId(FOREIGN_HASHI_TARGET_CHAIN_ID)
-  await foreignHashiManager.connect(foreignProxyOwner).setHashiThreshold(HASHI_THRESHOLD)
+  await foreignHashiManager.connect(foreignProxyOwner).setTargetChainId(FOREIGN_HASHI_TARGET_CHAIN_ID)
   await foreignHashiManager
     .connect(foreignProxyOwner)
-    .setHashiReporters([foreignFakeReporter1.address, foreignFakeReporter2.address])
-  await foreignHashiManager
-    .connect(foreignProxyOwner)
-    .setHashiAdapters([foreignFakeAdapter1.address, foreignFakeAdapter2.address])
+    .setReportersAdaptersAndThreshold(
+      [foreignFakeReporter1.address, foreignFakeReporter2.address],
+      [foreignFakeAdapter1.address, foreignFakeAdapter2.address],
+      HASHI_THRESHOLD,
+    )
   await foreignHashiManager.connect(foreignProxyOwner).setYaho(await foreignYaho.getAddress())
   await foreignHashiManager.connect(foreignProxyOwner).setYaru(await foreignYaru.getAddress())
 
@@ -142,12 +142,14 @@ task("AMB:e2e").setAction(async (_taskArgs, hre) => {
   homeHashiManager = await HashiManager.attach(await homeHashiManager.getAddress())
   await homeHashiManager.connect(homeProxyOwner).initialize(homeProxyOwner.address)
   await homeAmb.connect(homeProxyOwner).setHashiManager(await homeHashiManager.getAddress())
-  await homeHashiManager.connect(homeProxyOwner).setHashiTargetChainId(HOME_HASHI_TARGET_CHAIN_ID)
-  await homeHashiManager.connect(homeProxyOwner).setHashiThreshold(HASHI_THRESHOLD)
+  await homeHashiManager.connect(homeProxyOwner).setTargetChainId(HOME_HASHI_TARGET_CHAIN_ID)
   await homeHashiManager
-    .connect(homeProxyOwner)
-    .setHashiReporters([homeFakeReporter1.address, homeFakeReporter2.address])
-  await homeHashiManager.connect(homeProxyOwner).setHashiAdapters([homeFakeAdapter1.address, homeFakeAdapter2.address])
+    .connect(foreignProxyOwner)
+    .setReportersAdaptersAndThreshold(
+      [homeFakeReporter1.address, homeFakeReporter2.address],
+      [homeFakeAdapter1.address, homeFakeAdapter2.address],
+      HASHI_THRESHOLD,
+    )
   await homeHashiManager.connect(homeProxyOwner).setYaho(await homeYaho.getAddress())
   await homeHashiManager.connect(homeProxyOwner).setYaru(await homeYaru.getAddress())
 
@@ -157,8 +159,8 @@ task("AMB:e2e").setAction(async (_taskArgs, hre) => {
   await homeBridgeValidators.connect(homeProxyOwner).setRequiredSignatures(2)
 
   // NOTE: linking the 2 amb contracts
-  await foreignHashiManager.connect(foreignProxyOwner).setHashiTargetAddress(await homeAmb.getAddress())
-  await homeHashiManager.connect(homeProxyOwner).setHashiTargetAddress(await foreignAmb.getAddress())
+  await foreignHashiManager.connect(foreignProxyOwner).setTargetAddress(await homeAmb.getAddress())
+  await homeHashiManager.connect(homeProxyOwner).setTargetAddress(await foreignAmb.getAddress())
 
   // E T H E R E U M   --->   G N O S I S
   await hre.changeNetwork("fmainnet")

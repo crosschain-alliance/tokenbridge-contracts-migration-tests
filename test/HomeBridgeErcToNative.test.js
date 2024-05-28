@@ -97,12 +97,16 @@ describe("HomeBridgeErcToNative", () => {
     await hashiManager.connect(proxyOwner).initialize(proxyOwner.address)
 
     await homeBridgeErcToNative.connect(proxyOwner).setHashiManager(await hashiManager.getAddress())
-    await hashiManager.connect(proxyOwner).setHashiTargetChainId(HASHI_TARGET_CHAIN_ID)
-    await hashiManager.connect(proxyOwner).setHashiThreshold(HASHI_THRESHOLD)
-    await hashiManager.connect(proxyOwner).setHashiReporters([fakeReporter1.address, fakeReporter2.address])
-    await hashiManager.connect(proxyOwner).setHashiAdapters([fakeAdapter1.address, fakeAdapter2.address])
+    await hashiManager.connect(proxyOwner).setTargetChainId(HASHI_TARGET_CHAIN_ID)
+    await hashiManager
+      .connect(proxyOwner)
+      .setReportersAdaptersAndThreshold(
+        [fakeReporter1.address, fakeReporter2.address],
+        [fakeAdapter1.address, fakeAdapter2.address],
+        HASHI_THRESHOLD,
+      )
     await hashiManager.connect(proxyOwner).setYaho(await yaho.getAddress())
-    await hashiManager.connect(proxyOwner).setHashiTargetAddress(fakeTargetHomeBridgeErcToNative.address)
+    await hashiManager.connect(proxyOwner).setTargetAddress(fakeTargetHomeBridgeErcToNative.address)
     await hashiManager.connect(proxyOwner).setYaru(await yaru.getAddress())
 
     // NOTE: Add fake validators in order to be able to sign the message
