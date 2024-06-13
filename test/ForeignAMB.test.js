@@ -100,6 +100,10 @@ describe("ForeignAMB", () => {
     await hashiManager.connect(proxyOwner).setYaho(await yaho.getAddress())
     await hashiManager.connect(proxyOwner).setTargetAddress(fakeTargetAmb.address)
     await hashiManager.connect(proxyOwner).setYaru(await yaru.getAddress())
+    await hashiManager.connect(proxyOwner).setExpectedThreshold(HASHI_THRESHOLD)
+    await hashiManager
+      .connect(proxyOwner)
+      .setExpectedAdaptersHash([fakeAdapter1, fakeAdapter2].map(({ address }) => address))
 
     // NOTE: Add fake validators in order to be able to sign the message
     await bridgeValidators.connect(proxyOwner).addValidator(validator1.address)
@@ -152,7 +156,7 @@ describe("ForeignAMB", () => {
     await yaru.executeMessages([
       [
         1, // nonce
-        1, // target chain id
+        HASHI_TARGET_CHAIN_ID,
         2, // threshold
         fakeTargetAmb.address,
         await foreignAmb.getAddress(), // receiver

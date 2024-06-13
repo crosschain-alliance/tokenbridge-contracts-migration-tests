@@ -1,7 +1,7 @@
 const { task } = require("hardhat/config")
 
-const { packSignatures, signatureToVrs, append0 } = require("../test/utils/index")
-const { decodeHashiMessage } = require("./utils/hashi")
+const { packSignatures, signatureToVrs } = require("../test/utils/index")
+const { decodeHashiMessage, getRelevantDataFromEvents, getValidatorsSignatures } = require("./utils/index")
 
 const FOREIGN_AMB_PROXY_ADDRESS = "0x4C36d2919e407f0Cc2Ee3c993ccF8ac26d9CE64e"
 const FOREIGN_OWNER_ADDRESS = "0x42F38ec5A75acCEc50054671233dfAC9C0E7A3F6"
@@ -14,9 +14,8 @@ const HOME_OWNER_ADDRESS = "0x7a48dac683da91e4faa5ab13d91ab5fd170875bd"
 const HOME_BRIDGE_VALIDATOR_ADDRESS = "0xa280fed8d7cad9a76c8b50ca5c33c2534ffa5008"
 const HOME_HASHI_TARGET_CHAIN_ID = 1
 
-const MESSAGE_DISPATCHED_TOPIC = "0x218247aabc759e65b5bb92ccc074f9d62cd187259f2a0984c3c9cf91f67ff7cf"
 const USER_REQUEST_FOR_AFFIRMATION_TOPIC = "0x482515ce3d9494a37ce83f18b72b363449458435fafdd7a53ddea7460fe01b58"
-const USER_REQUEST_FOR_SIGNATURE = "0x520d2afde79cbd5db58755ac9480f81bc658e5c517fcae7365a3d832590b0183"
+const USER_REQUEST_FOR_SIGNATURE_TOPIC = "0x520d2afde79cbd5db58755ac9480f81bc658e5c517fcae7365a3d832590b0183"
 
 const PING_PONG_NONCE = 1
 
@@ -79,15 +78,8 @@ task("AMB:e2e").setAction(async (_taskArgs, hre) => {
   await foreignHashiManager.connect(foreignProxyOwner).initialize(foreignProxyOwner.address)
   await foreignAmb.connect(foreignProxyOwner).setHashiManager(await foreignHashiManager.getAddress())
   await foreignHashiManager.connect(foreignProxyOwner).setTargetChainId(FOREIGN_HASHI_TARGET_CHAIN_ID)
-  await foreignHashiManager
-    .connect(foreignProxyOwner)
-    .setReportersAdaptersAndThreshold(
-      [foreignFakeReporter1.address, foreignFakeReporter2.address],
-      [foreignFakeAdapter1.address, foreignFakeAdapter2.address],
-      HASHI_THRESHOLD,
-    )
+  await foreignHashiManager.connect(foreignProxyOwner).setExpectedThreshold(HASHI_THRESHOLD)
   await foreignHashiManager.connect(foreignProxyOwner).setYaho(await foreignYaho.getAddress())
-  await foreignHashiManager.connect(foreignProxyOwner).setYaru(await foreignYaru.getAddress())
 
   // NOTE: Add fake validators in order to be able to sign the message
   await foreignBridgeValidators.connect(foreignProxyOwner).addValidator(foreignValidator1.address)
@@ -112,7 +104,7 @@ task("AMB:e2e").setAction(async (_taskArgs, hre) => {
   })
 
   const homeProxyOwner = await ethers.provider.getSigner(HOME_OWNER_ADDRESS)
-  const homeSigners = await ethers.getSigners()
+  let homeSigners = await ethers.getSigners()
   const homeFakeReporter1 = homeSigners[12]
   const homeFakeAdapter1 = homeSigners[13]
   const homeFakeReporter2 = homeSigners[14]
@@ -143,15 +135,19 @@ task("AMB:e2e").setAction(async (_taskArgs, hre) => {
   await homeHashiManager.connect(homeProxyOwner).initialize(homeProxyOwner.address)
   await homeAmb.connect(homeProxyOwner).setHashiManager(await homeHashiManager.getAddress())
   await homeHashiManager.connect(homeProxyOwner).setTargetChainId(HOME_HASHI_TARGET_CHAIN_ID)
+  await homeHashiManager.connect(homeProxyOwner).setExpectedThreshold(HASHI_THRESHOLD)
   await homeHashiManager
-    .connect(foreignProxyOwner)
+    .connect(homeProxyOwner)
     .setReportersAdaptersAndThreshold(
       [homeFakeReporter1.address, homeFakeReporter2.address],
-      [homeFakeAdapter1.address, homeFakeAdapter2.address],
+      [foreignFakeAdapter1.address, foreignFakeAdapter2.address],
       HASHI_THRESHOLD,
     )
+
   await homeHashiManager.connect(homeProxyOwner).setYaho(await homeYaho.getAddress())
-  await homeHashiManager.connect(homeProxyOwner).setYaru(await homeYaru.getAddress())
+  await homeHashiManager
+    .connect(homeProxyOwner)
+    .setExpectedAdaptersHash([homeFakeAdapter1.address, homeFakeAdapter2.address])
 
   // NOTE: Add fake validators in order to be able to sign the message
   await homeBridgeValidators.connect(homeProxyOwner).addValidator(homeValidator1.address)
@@ -164,20 +160,37 @@ task("AMB:e2e").setAction(async (_taskArgs, hre) => {
 
   // E T H E R E U M   --->   G N O S I S
   await hre.changeNetwork("fmainnet")
+  await foreignHashiManager
+    .connect(foreignProxyOwner)
+    .setReportersAdaptersAndThreshold(
+      [foreignFakeReporter1.address, foreignFakeReporter2.address],
+      [homeFakeAdapter1.address, homeFakeAdapter2.address],
+      HASHI_THRESHOLD,
+    )
+  await foreignHashiManager
+    .connect(foreignProxyOwner)
+    .setExpectedAdaptersHash([foreignFakeAdapter1.address, foreignFakeAdapter2.address])
+
+  await foreignHashiManager.connect(foreignProxyOwner).setYaru(await foreignYaru.getAddress())
   await foreignPingPong.setTargetPingPong(await homePingPong.getAddress())
-  let tx = await foreignPingPong.ping(PING_PONG_NONCE)
-  let receipt = await tx.wait(1)
-  const { data: foreignMessage } = receipt.logs.find((_log) => _log.topics[0] === USER_REQUEST_FOR_AFFIRMATION_TOPIC)
-  const { data: foreignHashiMessage } = receipt.logs.find((_log) => _log.topics[0] === MESSAGE_DISPATCHED_TOPIC)
-  const [decodedForeignMessage] = abiCoder.decode(["bytes"], foreignMessage)
+  let tx = await foreignPingPong.ping(1)
+  const {
+    hashiMessage: foreignHashiMessage,
+    decodedMessage: decodedForeignMessage,
+    messageId: foreignMessageId,
+  } = getRelevantDataFromEvents({
+    receipt: await tx.wait(1),
+    topic: USER_REQUEST_FOR_AFFIRMATION_TOPIC,
+    abiCoder,
+  })
 
   await hre.changeNetwork("fgnosis")
+  await homeHashiManager.connect(homeProxyOwner).setYaru(await homeYaru.getAddress())
   await homePingPong.setTargetPingPong(await foreignPingPong.getAddress())
 
-  await homeAmb.connect(homeValidator1).executeAffirmation(decodedForeignMessage)
   await homeYaru.executeMessages([decodeHashiMessage(foreignHashiMessage, { abiCoder })])
-  let msgId = decodedForeignMessage.slice(0, 66)
-  if (!(await homeAmb.isApprovedByHashi(msgId))) throw new Error("Hashi didn't execute the message")
+  if (!(await homeAmb.isApprovedByHashi(foreignMessageId))) throw new Error("Hashi didn't execute the message")
+  await homeAmb.connect(homeValidator1).executeAffirmation(decodedForeignMessage)
   await homeAmb.connect(homeValidator2).executeAffirmation(decodedForeignMessage)
 
   let lastReceivedNonce = await homePingPong.lastReceivedNonce()
@@ -186,17 +199,20 @@ task("AMB:e2e").setAction(async (_taskArgs, hre) => {
 
   // G N O S I S   --->   E T H E R E U M
   tx = await homePingPong.ping(PING_PONG_NONCE)
-  receipt = await tx.wait(1)
-  const { data: homeMessage } = receipt.logs.find((_log) => _log.topics[0] === USER_REQUEST_FOR_SIGNATURE)
-  const { data: homeHashiMessage } = receipt.logs.find((_log) => _log.topics[0] === MESSAGE_DISPATCHED_TOPIC)
-  const [decodedHomeMessage] = abiCoder.decode(["bytes"], homeMessage)
+  const {
+    hashiMessage: homeHashiMessage,
+    decodedMessage: decodedHomeMessage,
+    messageId: homeMessageId,
+  } = getRelevantDataFromEvents({
+    receipt: await tx.wait(1),
+    topic: USER_REQUEST_FOR_SIGNATURE_TOPIC,
+    abiCoder,
+  })
 
-  const signatures = await Promise.all(
-    [homeValidator1, homeValidator2].map((_validator) =>
-      _validator.signMessage(append0(ethers.toBeArray(decodedHomeMessage))),
-    ),
-  )
-
+  signatures = await getValidatorsSignatures({
+    message: decodedHomeMessage,
+    validators: [homeValidator1, homeValidator2],
+  })
   await Promise.all(
     [homeValidator1, homeValidator2].map((_validator, _index) =>
       homeAmb.connect(_validator).submitSignature(signatures[_index], decodedHomeMessage),
@@ -206,9 +222,8 @@ task("AMB:e2e").setAction(async (_taskArgs, hre) => {
   await hre.changeNetwork("fmainnet")
   // NOTE: if Hashi is enabled the handleMessage fx is invoked with Hashi message execution
   await foreignYaru.executeMessages([decodeHashiMessage(homeHashiMessage, { abiCoder })])
-  msgId = decodedHomeMessage.slice(0, 66)
-  if (!(await foreignAmb.isApprovedByHashi(msgId))) throw new Error("Hashi didn't execute the message")
-  const packedSignatures = packSignatures(signatures.map((_sig) => signatureToVrs(_sig)))
+  if (!(await foreignAmb.isApprovedByHashi(homeMessageId))) throw new Error("Hashi didn't execute the message")
+  let packedSignatures = packSignatures(signatures.map((_sig) => signatureToVrs(_sig)))
   await foreignAmb.executeSignatures(decodedHomeMessage, packedSignatures)
   lastReceivedNonce = await foreignPingPong.lastReceivedNonce()
   if (parseInt(lastReceivedNonce) !== PING_PONG_NONCE) throw new Error("Ops, lastReceivedNonce != PING_PONG_NONCE")

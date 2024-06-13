@@ -1,6 +1,6 @@
 const { task } = require("hardhat/config")
-const { packSignatures, signatureToVrs, append0 } = require("../test/utils/index")
-const { decodeHashiMessage } = require("./utils/hashi")
+const { packSignatures, signatureToVrs } = require("../test/utils/index")
+const { decodeHashiMessage } = require("./utils/index")
 
 const FOREIGN_XDAI_PROXY_ADDRESS = "0x4aa42145Aa6Ebf72e164C9bBC74fbD3788045016"
 const FOREIGN_OWNER_ADDRESS = "0x42F38ec5A75acCEc50054671233dfAC9C0E7A3F6"

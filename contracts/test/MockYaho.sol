@@ -1,37 +1,9 @@
 pragma solidity ^0.8.20;
 
-interface IAdapter {
-    function getHash(uint256 domain, uint256 id) external view returns (bytes32 hash);
-}
-
-interface IReporter {
-    function dispatchBlocks(
-        uint256 targetChainId,
-        IAdapter adapter,
-        uint256[] calldata blockNumbers
-    ) external payable returns (bytes32);
-
-    function dispatchMessages(
-        uint256 targetChainId,
-        IAdapter adapter,
-        uint256[] calldata messageIds,
-        bytes32[] calldata messageHashes
-    ) external payable returns (bytes32);
-}
+import { Message } from "./IMessage.sol";
 
 contract MockYaho {
     uint256 public currentNonce;
-
-    struct Message {
-        uint256 nonce;
-        uint256 targetChainId;
-        uint256 threshold;
-        address sender;
-        address receiver;
-        bytes data;
-        IReporter[] reporters;
-        IAdapter[] adapters;
-    }
 
     event MessageDispatched(uint256 indexed messageId, Message message);
 
@@ -40,8 +12,8 @@ contract MockYaho {
         uint256 threshold,
         address receiver,
         bytes calldata data,
-        IReporter[] calldata reporters,
-        IAdapter[] calldata adapters
+        address[] calldata reporters,
+        address[] calldata adapters
     ) external returns (uint256, bytes32[] memory) {
         Message memory message = Message(
             currentNonce,
