@@ -20,25 +20,46 @@ module.exports.decodeHashiMessage = (_message, { abiCoder }) => {
   ]
 }
 
-module.exports.getRelevantDataFromEvents = ({ receipt, abiCoder, topic, onlyHashiMessage = false }) => {
+module.exports.getRelevantDataFromEvents = ({ receipt, abiCoder, topic, onlyHashiMessage = false, bridge = "amb" }) => {
   const { data: hashiMessage } = receipt.logs.find((_log) => _log.topics[0] === MESSAGE_DISPATCHED_TOPIC)
 
-  if (onlyHashiMessage) {
+  if (bridge === "amb") {
+    if (onlyHashiMessage) {
+      return {
+        hashiMessage,
+      }
+    }
+
+    const { data: message } = receipt.logs.find((_log) => _log.topics[0] === topic)
+    const [decodedMessage] = abiCoder.decode(["bytes"], message)
+    const messageId = decodedMessage.slice(0, 66)
     return {
+      decodedMessage,
+      hashiMessage,
+      message,
+      messageId,
+    }
+  }
+  if (bridge === "xdai") {
+    if (topic === "0xf6968e689b3d8c24f22c10c2a3256bb5ca483a474e11bac08423baa049e38ae8") {
+      const { args } = receipt.logs.find((_log) => _log.topics[0] === topic)
+      return {
+        messageArgs: args,
+        hashiMessage,
+      }
+    }
+
+    const { data: message } = receipt.logs.find((_log) => _log.topics[0] === topic)
+    return {
+      message,
       hashiMessage,
     }
   }
-
-  const { data: message } = receipt.logs.find((_log) => _log.topics[0] === topic)
-  const [decodedMessage] = abiCoder.decode(["bytes"], message)
-  const messageId = decodedMessage.slice(0, 66)
-  return {
-    decodedMessage,
-    hashiMessage,
-    message,
-    messageId,
-  }
 }
 
-module.exports.getValidatorsSignatures = ({ validators, message }) =>
-  Promise.all(validators.map((_validator) => _validator.signMessage(append0(ethers.toBeArray(message)))))
+module.exports.getValidatorsSignatures = ({ validators, message, bridge = "amb" }) =>
+  Promise.all(
+    validators.map((_validator) =>
+      _validator.signMessage(bridge === "amb" ? append0(ethers.toBeArray(message)) : ethers.toBeArray(message)),
+    ),
+  )

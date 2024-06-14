@@ -1,6 +1,6 @@
 const { task } = require("hardhat/config")
 const { packSignatures, signatureToVrs } = require("../test/utils/index")
-const { decodeHashiMessage } = require("./utils/index")
+const { decodeHashiMessage, getRelevantDataFromEvents, getValidatorsSignatures } = require("./utils/index")
 
 const FOREIGN_XDAI_PROXY_ADDRESS = "0x4aa42145Aa6Ebf72e164C9bBC74fbD3788045016"
 const FOREIGN_OWNER_ADDRESS = "0x42F38ec5A75acCEc50054671233dfAC9C0E7A3F6"
@@ -16,7 +16,6 @@ const HOME_BRIDGE_VALIDATOR_OWNER_ADDRESS = "0x7a48dac683da91e4faa5ab13d91ab5fd1
 const HOME_BRIDGE_VALIDATOR_ADDRESS = "0xb289f0e6fbdff8eee340498a56e1787b303f1b6d"
 const HOME_HASHI_TARGET_CHAIN_ID = 1
 
-const MESSAGE_DISPATCHED_TOPIC = "0x218247aabc759e65b5bb92ccc074f9d62cd187259f2a0984c3c9cf91f67ff7cf"
 const USER_REQUEST_FOR_AFFIRMATION_TOPIC = "0xf6968e689b3d8c24f22c10c2a3256bb5ca483a474e11bac08423baa049e38ae8"
 const USER_REQUEST_FOR_SIGNATURE_TOPIC = "0xbcb4ebd89690a7455d6ec096a6bfc4a8a891ac741ffe4e678ea2614853248658"
 const ADDED_RECEIVER_TOPIC = "0x3c798bbcf33115b42c728b8504cff11dd58736e9fa789f1cda2738db7d696b2a"
@@ -85,6 +84,7 @@ task("XDAIBridge:e2e").setAction(async (_taskArgs, hre) => {
   foreignHashiManager = await HashiManager.attach(await foreignHashiManager.getAddress())
   await foreignHashiManager.connect(foreignProxyOwner).initialize(foreignProxyOwner.address)
   await foreignBridgeErcToNative.connect(foreignProxyOwner).setHashiManager(await foreignHashiManager.getAddress())
+  await foreignHashiManager.connect(foreignProxyOwner).setExpectedThreshold(HASHI_THRESHOLD)
   await foreignHashiManager.connect(foreignProxyOwner).setTargetChainId(FOREIGN_HASHI_TARGET_CHAIN_ID)
   await foreignHashiManager
     .connect(foreignProxyOwner)
@@ -169,16 +169,20 @@ task("XDAIBridge:e2e").setAction(async (_taskArgs, hre) => {
   homeHashiManager = await HashiManager.attach(await homeHashiManager.getAddress())
   await homeHashiManager.connect(homeProxyOwner).initialize(homeProxyOwner.address)
   await homeBridgeErcToNative.connect(homeProxyOwner).setHashiManager(await homeHashiManager.getAddress())
+  await homeHashiManager.connect(homeProxyOwner).setExpectedThreshold(HASHI_THRESHOLD)
   await homeHashiManager.connect(homeProxyOwner).setTargetChainId(HOME_HASHI_TARGET_CHAIN_ID)
   await homeHashiManager
-    .connect(foreignProxyOwner)
+    .connect(homeProxyOwner)
     .setReportersAdaptersAndThreshold(
       [homeFakeReporter1.address, homeFakeReporter2.address],
-      [homeFakeAdapter1.address, homeFakeAdapter2.address],
+      [foreignFakeAdapter1.address, foreignFakeAdapter2.address],
       HASHI_THRESHOLD,
     )
   await homeHashiManager.connect(homeProxyOwner).setYaho(await homeYaho.getAddress())
   await homeHashiManager.connect(homeProxyOwner).setYaru(await homeYaru.getAddress())
+  await homeHashiManager
+    .connect(homeProxyOwner)
+    .setExpectedAdaptersHash([homeFakeAdapter1.address, homeFakeAdapter2.address])
 
   // NOTE: Add fake validators in order to be able to sign the message
   await homeBridgeValidators.connect(homeBridgeValidatorOwner).addValidator(homeValidator1.address)
@@ -190,21 +194,33 @@ task("XDAIBridge:e2e").setAction(async (_taskArgs, hre) => {
 
   // E T H E R E U M   --->   G N O S I S
   await hre.changeNetwork("fmainnet")
+  await foreignHashiManager
+    .connect(foreignProxyOwner)
+    .setReportersAdaptersAndThreshold(
+      [foreignFakeReporter1.address, foreignFakeReporter2.address],
+      [homeFakeAdapter1.address, homeFakeAdapter2.address],
+      HASHI_THRESHOLD,
+    )
+  await foreignHashiManager
+    .connect(foreignProxyOwner)
+    .setExpectedAdaptersHash([foreignFakeAdapter1.address, foreignFakeAdapter2.address])
 
   const amount = ethers.parseUnits("10", 18)
   await dai.approve(await foreignBridgeErcToNative.getAddress(), amount)
   let tx = await foreignBridgeErcToNative.relayTokens(homeReceiver.address, amount)
-  let receipt = await tx.wait(1)
-  const { args: foreignArgs } = receipt.logs.find((_log) => _log.topics[0] === USER_REQUEST_FOR_AFFIRMATION_TOPIC)
-  const { data: foreignHashiMessage } = receipt.logs.find((_log) => _log.topics[0] === MESSAGE_DISPATCHED_TOPIC)
+  const { messageArgs: foreignMessageArgs, hashiMessage: foreignHashiMessage } = getRelevantDataFromEvents({
+    bridge: "xdai",
+    topic: USER_REQUEST_FOR_AFFIRMATION_TOPIC,
+    receipt: await tx.wait(1),
+  })
 
   await hre.changeNetwork("fgnosis")
-  await homeBridgeErcToNative.connect(homeValidator1).executeAffirmation(...foreignArgs)
+  await homeBridgeErcToNative.connect(homeValidator1).executeAffirmation(...foreignMessageArgs)
   const decodedForeignHashiMessage = decodeHashiMessage(foreignHashiMessage, { abiCoder })
   await homeYaru.executeMessages([decodedForeignHashiMessage])
   if (!(await homeBridgeErcToNative.isApprovedByHashi(ethers.keccak256(decodedForeignHashiMessage[5]))))
     throw new Error("Hashi didn't execute the message")
-  tx = await homeBridgeErcToNative.connect(homeValidator2).executeAffirmation(...foreignArgs)
+  tx = await homeBridgeErcToNative.connect(homeValidator2).executeAffirmation(...foreignMessageArgs)
   receipt = await tx.wait()
   const addedReceiverLog = receipt.logs.find((_log) => _log.topics[0] === ADDED_RECEIVER_TOPIC)
   if (!addedReceiverLog) throw new Error("Ops, AddedReceiver not found")
@@ -215,9 +231,11 @@ task("XDAIBridge:e2e").setAction(async (_taskArgs, hre) => {
     to: await homeBridgeErcToNative.getAddress(),
     value: amount,
   })
-  receipt = await tx.wait()
-  const { data: homeMessage } = receipt.logs.find((_log) => _log.topics[0] === USER_REQUEST_FOR_SIGNATURE_TOPIC)
-  const { data: homeHashiMessage } = receipt.logs.find((_log) => _log.topics[0] === MESSAGE_DISPATCHED_TOPIC)
+  const { message: homeMessage, hashiMessage: homeHashiMessage } = getRelevantDataFromEvents({
+    bridge: "xdai",
+    receipt: await tx.wait(),
+    topic: USER_REQUEST_FOR_SIGNATURE_TOPIC,
+  })
 
   const [receiver, value, nonce] = abiCoder.decode(["address", "uint256", "bytes32"], homeMessage)
   const homeMessageToSign = ethers.solidityPacked(
@@ -225,10 +243,13 @@ task("XDAIBridge:e2e").setAction(async (_taskArgs, hre) => {
     [receiver, value, nonce, await foreignBridgeErcToNative.getAddress()],
   )
 
-  const signatures = await Promise.all(
-    [homeValidator1, homeValidator2].map((_validator) => _validator.signMessage(ethers.toBeArray(homeMessageToSign))),
-  )
+  const signatures = await getValidatorsSignatures({
+    bridge: "xdai",
+    message: homeMessageToSign,
+    validators: [homeValidator1, homeValidator2],
+  })
 
+  // TODO: broken here
   await Promise.all(
     [homeValidator1, homeValidator2].map((_validator, _index) =>
       homeBridgeErcToNative.connect(_validator).submitSignature(signatures[_index], homeMessageToSign),

@@ -143,7 +143,6 @@ task("AMB:e2e").setAction(async (_taskArgs, hre) => {
       [foreignFakeAdapter1.address, foreignFakeAdapter2.address],
       HASHI_THRESHOLD,
     )
-
   await homeHashiManager.connect(homeProxyOwner).setYaho(await homeYaho.getAddress())
   await homeHashiManager
     .connect(homeProxyOwner)
@@ -228,4 +227,105 @@ task("AMB:e2e").setAction(async (_taskArgs, hre) => {
   lastReceivedNonce = await foreignPingPong.lastReceivedNonce()
   if (parseInt(lastReceivedNonce) !== PING_PONG_NONCE) throw new Error("Ops, lastReceivedNonce != PING_PONG_NONCE")
   console.log("Gnosis -> Ethereum OK")
+
+  // R E S E N D   E X I S T I N G   M E S S A G E        E T H E R E U M   --->   G N O S I S
+  /*await hre.changeNetwork("fmainnet")
+  tx = await foreignPingPong.ping(PING_PONG_NONCE + 1)
+  const {
+    hashiMessage: foreignHashiMessage2,
+    decodedMessage: decodedForeignMessage2,
+    messageId: foreignMessageId2,
+  } = getRelevantDataFromEvents({
+    receipt: await tx.wait(1),
+    topic: USER_REQUEST_FOR_AFFIRMATION_TOPIC,
+    abiCoder,
+  })
+
+  // NOTE: At this point adapters on Gnosis go down so we need to change them
+  await hre.changeNetwork("fgnosis")
+  homeSigners = await ethers.getSigners()
+  const homeFakeAdapter3 = homeSigners[17]
+  const homeFakeAdapter4 = homeSigners[18]
+  await homeHashiManager
+    .connect(homeProxyOwner)
+    .setExpectedAdaptersHash([homeFakeAdapter3.address, homeFakeAdapter4.address])
+  await hre.changeNetwork("fmainnet")
+  await foreignHashiManager
+    .connect(foreignProxyOwner)
+    .setReportersAdaptersAndThreshold(
+      [foreignFakeReporter1.address, foreignFakeReporter2.address],
+      [homeFakeAdapter3.address, homeFakeAdapter4.address],
+      HASHI_THRESHOLD,
+    )
+
+  // NOTE: once they have been changed, we need to resendExistingMessageWithHashi
+  tx = await foreignAmb.resendExistingMessageWithHashi(decodedForeignMessage2)
+  const { hashiMessage: foreignHashiMessage3 } = getRelevantDataFromEvents({
+    onlyHashiMessage: true,
+    receipt: await tx.wait(1),
+    abiCoder,
+    topic: USER_REQUEST_FOR_AFFIRMATION_TOPIC,
+  })
+
+  await hre.changeNetwork("fgnosis")
+  await homeYaru.executeMessages([decodeHashiMessage(foreignHashiMessage3, { abiCoder })])
+  if (!(await homeAmb.isApprovedByHashi(foreignMessageId2))) throw new Error("Hashi didn't execute the message")
+  await homeAmb.connect(homeValidator1).executeAffirmation(decodedForeignMessage2)
+  await homeAmb.connect(homeValidator2).executeAffirmation(decodedForeignMessage2)
+
+  lastReceivedNonce = await homePingPong.lastReceivedNonce()
+  if (parseInt(lastReceivedNonce) !== PING_PONG_NONCE + 1) throw new Error("Ops, lastReceivedNonce != PING_PONG_NONCE")
+  console.log("Ethereum -> Gnosis OK (resendExistingMessageWithHashi)")
+
+  // R E S E N D   E X I S T I N G   M E S S A G E        G N O S I S   --->   E T H E R E U M
+  tx = await homePingPong.ping(PING_PONG_NONCE + 1)
+  const { decodedMessage: decodedHomeMessage4, messageId: homeMessageId4 } = getRelevantDataFromEvents({
+    receipt: await tx.wait(1),
+    topic: USER_REQUEST_FOR_SIGNATURE_TOPIC,
+    abiCoder,
+  })
+
+  signatures = await getValidatorsSignatures({
+    message: decodedHomeMessage4,
+    validators: [homeValidator1, homeValidator2],
+  })
+  await Promise.all(
+    [homeValidator1, homeValidator2].map((_validator, _index) =>
+      homeAmb.connect(_validator).submitSignature(signatures[_index], decodedHomeMessage4),
+    ),
+  )
+  // NOTE: At this point adapters on Mainnet go down so we need to change them
+  await hre.changeNetwork("fmainnet")
+  homeSigners = await ethers.getSigners()
+  const foreignFakeAdapter3 = homeSigners[17]
+  const foreignFakeAdapter4 = homeSigners[18]
+  await foreignHashiManager
+    .connect(foreignProxyOwner)
+    .setExpectedAdaptersHash([foreignFakeAdapter3.address, foreignFakeAdapter4.address])
+  await hre.changeNetwork("fgnosis")
+  await homeHashiManager
+    .connect(homeProxyOwner)
+    .setReportersAdaptersAndThreshold(
+      [homeFakeReporter1.address, homeFakeReporter2.address],
+      [foreignFakeAdapter3.address, foreignFakeAdapter4.address],
+      HASHI_THRESHOLD,
+    )
+
+  // NOTE: once they have been changed, we need to resendExistingMessageWithHashi
+  tx = await homeAmb.resendExistingMessageWithHashi(decodedHomeMessage4)
+  const { hashiMessage: foreignHashiMessage5 } = getRelevantDataFromEvents({
+    onlyHashiMessage: true,
+    receipt: await tx.wait(1),
+    abiCoder,
+    topic: USER_REQUEST_FOR_AFFIRMATION_TOPIC,
+  })
+
+  await hre.changeNetwork("fmainnet")
+  await foreignYaru.executeMessages([decodeHashiMessage(foreignHashiMessage5, { abiCoder })])
+  if (!(await foreignAmb.isApprovedByHashi(homeMessageId4))) throw new Error("Hashi didn't execute the message")
+  packedSignatures = packSignatures(signatures.map((_sig) => signatureToVrs(_sig)))
+  await foreignAmb.executeSignatures(decodedHomeMessage4, packedSignatures)
+  lastReceivedNonce = await foreignPingPong.lastReceivedNonce()
+  if (parseInt(lastReceivedNonce) !== PING_PONG_NONCE + 1) throw new Error("Ops, lastReceivedNonce != PING_PONG_NONCE")
+  console.log("Gnosis -> Ethereum OK (resendExistingMessageWithHashi)")*/
 })

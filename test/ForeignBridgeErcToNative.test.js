@@ -108,6 +108,10 @@ describe("ForeignBridgeErcToNative", () => {
     await hashiManager.connect(proxyOwner).setYaho(await yaho.getAddress())
     await hashiManager.connect(proxyOwner).setTargetAddress(fakeTargetForeignBridgeErcToNative.address)
     await hashiManager.connect(proxyOwner).setYaru(await yaru.getAddress())
+    await hashiManager.connect(proxyOwner).setExpectedThreshold(HASHI_THRESHOLD)
+    await hashiManager
+      .connect(proxyOwner)
+      .setExpectedAdaptersHash([fakeAdapter1, fakeAdapter2].map(({ address }) => address))
 
     // NOTE: Add fake validators in order to be able to sign the message
     await bridgeValidators.connect(proxyOwner).addValidator(validator1.address)
