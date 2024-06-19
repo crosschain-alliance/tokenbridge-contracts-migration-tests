@@ -231,11 +231,7 @@ task("AMB:e2e").setAction(async (_taskArgs, hre) => {
   // R E S E N D   E X I S T I N G   M E S S A G E        E T H E R E U M   --->   G N O S I S
   await hre.changeNetwork("fmainnet")
   tx = await foreignPingPong.ping(PING_PONG_NONCE + 1)
-  const {
-    hashiMessage: foreignHashiMessage2,
-    decodedMessage: decodedForeignMessage2,
-    messageId: foreignMessageId2,
-  } = getRelevantDataFromEvents({
+  const { decodedMessage: decodedForeignMessage2, messageId: foreignMessageId2 } = getRelevantDataFromEvents({
     receipt: await tx.wait(1),
     topic: USER_REQUEST_FOR_AFFIRMATION_TOPIC,
     abiCoder,
@@ -313,7 +309,7 @@ task("AMB:e2e").setAction(async (_taskArgs, hre) => {
 
   // NOTE: once they have been changed, we need to resendDataWithHashi
   tx = await homeAmb.resendDataWithHashi(decodedHomeMessage4)
-  const { hashiMessage: foreignHashiMessage5 } = getRelevantDataFromEvents({
+  const { hashiMessage: homeHashiMessage3 } = getRelevantDataFromEvents({
     onlyHashiMessage: true,
     receipt: await tx.wait(1),
     abiCoder,
@@ -321,7 +317,7 @@ task("AMB:e2e").setAction(async (_taskArgs, hre) => {
   })
 
   await hre.changeNetwork("fmainnet")
-  await foreignYaru.executeMessages([decodeHashiMessage(foreignHashiMessage5, { abiCoder })])
+  await foreignYaru.executeMessages([decodeHashiMessage(homeHashiMessage3, { abiCoder })])
   if (!(await foreignAmb.isApprovedByHashi(homeMessageId4))) throw new Error("Hashi didn't execute the message")
   packedSignatures = packSignatures(signatures.map((_sig) => signatureToVrs(_sig)))
   await foreignAmb.executeSignatures(decodedHomeMessage4, packedSignatures)

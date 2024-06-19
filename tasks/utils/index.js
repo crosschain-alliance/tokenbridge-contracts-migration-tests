@@ -41,17 +41,21 @@ module.exports.getRelevantDataFromEvents = ({ receipt, abiCoder, topic, onlyHash
     }
   }
   if (bridge === "xdai") {
-    if (topic === "0xf6968e689b3d8c24f22c10c2a3256bb5ca483a474e11bac08423baa049e38ae8") {
-      const { args } = receipt.logs.find((_log) => _log.topics[0] === topic)
+    const log = receipt.logs.find((_log) => _log.topics[0] === topic)
+
+    if (
+      topic === "0xf6968e689b3d8c24f22c10c2a3256bb5ca483a474e11bac08423baa049e38ae8" ||
+      topic === "0xbcb4ebd89690a7455d6ec096a6bfc4a8a891ac741ffe4e678ea2614853248658"
+    ) {
       return {
-        messageArgs: args,
+        message: log.data,
+        messageArgs: log.args,
         hashiMessage,
       }
     }
 
-    const { data: message } = receipt.logs.find((_log) => _log.topics[0] === topic)
     return {
-      message,
+      message: log.data,
       hashiMessage,
     }
   }

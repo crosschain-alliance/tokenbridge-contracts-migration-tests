@@ -119,7 +119,7 @@ describe("ForeignAMB", () => {
     )
   })
 
-  it("should be able to re send a existing message using hashi", async () => {
+  it("should be able to re send an existing message using hashi", async () => {
     const tx = await foreignAmb.requireToPassMessage(fakeReceiver.address, "0x01", 200000)
     const receipt = await tx.wait(1)
     const log = receipt.logs.find(({ topics }) => topics[0] === USER_REQUEST_FOR_AFFIRMATION_TOPIC)
