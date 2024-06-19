@@ -9,6 +9,7 @@ const BRIDGE_VALIDATOR_ADDRESS = "0xed84a648b3c51432ad0fD1C2cD2C45677E9d4064"
 const HASHI_TARGET_CHAIN_ID = 100
 const HASHI_THRESHOLD = 2
 const MESSAGE_PACKING_VERSION = "00050000"
+const USER_REQUEST_FOR_AFFIRMATION_TOPIC = "0x482515ce3d9494a37ce83f18b72b363449458435fafdd7a53ddea7460fe01b58"
 
 // NOTE: be sure to run this in a mainnet forked environment
 describe("ForeignAMB", () => {
@@ -116,6 +117,19 @@ describe("ForeignAMB", () => {
       yaho,
       "MessageDispatched",
     )
+  })
+
+  it("should be able to re send a existing message using hashi", async () => {
+    const tx = await foreignAmb.requireToPassMessage(fakeReceiver.address, "0x01", 200000)
+    const receipt = await tx.wait(1)
+    const log = receipt.logs.find(({ topics }) => topics[0] === USER_REQUEST_FOR_AFFIRMATION_TOPIC)
+    const eventData = log.args[1]
+    await expect(foreignAmb.resendDataWithHashi(eventData)).to.emit(yaho, "MessageDispatched")
+  })
+
+  it("should not be able to re send a non-existing message using hashi", async () => {
+    const eventData = "0x01"
+    await expect(foreignAmb.resendDataWithHashi(eventData)).to.be.reverted
   })
 
   it("should be able to executeSignatures even without Hashi approval as it's optional", async () => {
