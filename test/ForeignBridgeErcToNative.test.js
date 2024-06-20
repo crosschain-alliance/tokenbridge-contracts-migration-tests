@@ -10,6 +10,7 @@ const HASHI_TARGET_CHAIN_ID = 100
 const HASHI_THRESHOLD = 2
 const DAI_ADDRESS = "0x6B175474E89094C44Da98b954EedeAC495271d0F"
 const DAI_FAUCET_ADDRESS = "0xD1668fB5F690C59Ab4B0CAbAd0f8C1617895052B"
+const USER_REQUEST_FOR_AFFIRMATION_TOPIC = "0xf6968e689b3d8c24f22c10c2a3256bb5ca483a474e11bac08423baa049e38ae8"
 
 // NOTE: be sure to run this in a mainnet forked environment
 describe("ForeignBridgeErcToNative", () => {
@@ -126,6 +127,21 @@ describe("ForeignBridgeErcToNative", () => {
     const amount = ethers.parseUnits("10", 18)
     await dai.approve(await foreignBridgeErcToNative.getAddress(), amount)
     await expect(foreignBridgeErcToNative.relayTokens(fakeReceiver.address, amount)).to.emit(yaho, "MessageDispatched")
+  })
+
+  it("should be able to re send an existing message using hashi", async () => {
+    const amount = ethers.parseUnits("10", 18)
+    await dai.approve(await foreignBridgeErcToNative.getAddress(), amount)
+    const tx = await foreignBridgeErcToNative.relayTokens(fakeReceiver.address, amount)
+    const receipt = await tx.wait(1)
+    const log = receipt.logs.find(({ topics }) => topics[0] === USER_REQUEST_FOR_AFFIRMATION_TOPIC)
+    const encodedData = ethers.solidityPacked(["address", "uint256", "bytes32"], log.args)
+    await expect(foreignBridgeErcToNative.resendDataWithHashi(encodedData)).to.emit(yaho, "MessageDispatched")
+  })
+
+  it("should not be able to re send an non-existing message using hashi", async () => {
+    const eventData = "0x01"
+    await expect(foreignBridgeErcToNative.resendDataWithHashi(eventData)).to.be.reverted
   })
 
   it("should be able to release 10 event without hashi approval as it's optional", async () => {

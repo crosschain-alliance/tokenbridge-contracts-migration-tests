@@ -7,6 +7,7 @@ const BRIDGE_VALIDATOR_OWNER_ADDRESS = "0x7a48dac683da91e4faa5ab13d91ab5fd170875
 const BRIDGE_VALIDATOR_ADDRESS = "0xb289f0e6fbdff8eee340498a56e1787b303f1b6d"
 const HASHI_TARGET_CHAIN_ID = 1
 const HASHI_THRESHOLD = 2
+const USER_REQUEST_FOR_SIGNATURE_TOPIC = "0xbcb4ebd89690a7455d6ec096a6bfc4a8a891ac741ffe4e678ea2614853248658"
 
 // NOTE: be sure to run this in a gnosis chain forked environment
 describe("HomeBridgeErcToNative", () => {
@@ -117,6 +118,22 @@ describe("HomeBridgeErcToNative", () => {
     await bridgeValidators.connect(bridgeValidatorOwner).addValidator(validator1.address)
     await bridgeValidators.connect(bridgeValidatorOwner).addValidator(validator2.address)
     await bridgeValidators.connect(bridgeValidatorOwner).setRequiredSignatures(2)
+  })
+
+  it("should be able to re send an existing message using hashi", async () => {
+    const amount = ethers.parseEther("10")
+    const tx = await homeBridgeErcToNative.relayTokens(fakeReceiver.address, {
+      value: amount,
+    })
+    const receipt = await tx.wait(1)
+    const log = receipt.logs.find(({ topics }) => topics[0] === USER_REQUEST_FOR_SIGNATURE_TOPIC)
+    const encodedData = ethers.solidityPacked(["address", "uint256", "bytes32"], log.args)
+    await expect(homeBridgeErcToNative.resendDataWithHashi(encodedData)).to.emit(yaho, "MessageDispatched")
+  })
+
+  it("should not be able to re send an non-existing message using hashi", async () => {
+    const eventData = "0x01"
+    await expect(homeBridgeErcToNative.resendDataWithHashi(eventData)).to.be.reverted
   })
 
   it("should be able to execute an affirmation and mint 10 dai with the hashi approval", async () => {

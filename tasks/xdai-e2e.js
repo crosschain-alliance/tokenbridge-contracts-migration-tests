@@ -205,7 +205,7 @@ task("XDAIBridge:e2e").setAction(async (_taskArgs, hre) => {
     .connect(foreignProxyOwner)
     .setExpectedAdaptersHash([foreignFakeAdapter1.address, foreignFakeAdapter2.address])
 
-  const amount = ethers.parseUnits("10", 18)
+  let amount = ethers.parseUnits("10", 18)
   await dai.approve(await foreignBridgeErcToNative.getAddress(), amount)
   let tx = await foreignBridgeErcToNative.relayTokens(homeReceiver.address, amount)
   const { messageArgs: foreignMessageArgs, hashiMessage: foreignHashiMessage } = getRelevantDataFromEvents({
@@ -222,7 +222,7 @@ task("XDAIBridge:e2e").setAction(async (_taskArgs, hre) => {
     throw new Error("Hashi didn't execute the message")
   tx = await homeBridgeErcToNative.connect(homeValidator2).executeAffirmation(...foreignMessageArgs)
   receipt = await tx.wait()
-  const addedReceiverLog = receipt.logs.find((_log) => _log.topics[0] === ADDED_RECEIVER_TOPIC)
+  let addedReceiverLog = receipt.logs.find((_log) => _log.topics[0] === ADDED_RECEIVER_TOPIC)
   if (!addedReceiverLog) throw new Error("Ops, AddedReceiver not found")
   console.log("Ethereum -> Gnosis OK")
 
@@ -243,13 +243,12 @@ task("XDAIBridge:e2e").setAction(async (_taskArgs, hre) => {
     [receiver, value, nonce, await foreignBridgeErcToNative.getAddress()],
   )
 
-  const signatures = await getValidatorsSignatures({
+  let signatures = await getValidatorsSignatures({
     bridge: "xdai",
     message: homeMessageToSign,
     validators: [homeValidator1, homeValidator2],
   })
 
-  // TODO: broken here
   await Promise.all(
     [homeValidator1, homeValidator2].map((_validator, _index) =>
       homeBridgeErcToNative.connect(_validator).submitSignature(signatures[_index], homeMessageToSign),
@@ -257,7 +256,7 @@ task("XDAIBridge:e2e").setAction(async (_taskArgs, hre) => {
   )
 
   await hre.changeNetwork("fmainnet")
-  const balancePre = await dai.balanceOf(homeOwner.address)
+  let balancePre = await dai.balanceOf(homeOwner.address)
   const decodedHomeHashiMessage = decodeHashiMessage(homeHashiMessage, { abiCoder })
   await foreignYaru.executeMessages([decodedHomeHashiMessage])
   if (!(await foreignBridgeErcToNative.isApprovedByHashi(ethers.keccak256(decodedHomeHashiMessage[5]))))
@@ -266,7 +265,125 @@ task("XDAIBridge:e2e").setAction(async (_taskArgs, hre) => {
     homeMessageToSign,
     packSignatures(signatures.map((_sig) => signatureToVrs(_sig))),
   )
-  const balancePost = await dai.balanceOf(homeOwner.address)
+  balancePost = await dai.balanceOf(homeOwner.address)
   if (balancePre + BigInt(amount.toString()) != balancePost) throw new Error("Ops, someting weird happened")
   console.log("Gnosis -> Ethereum OK")
+
+  // R E S E N D   E X I S T I N G   M E S S A G E        E T H E R E U M   --->   G N O S I S
+  await hre.changeNetwork("fmainnet")
+  amount = ethers.parseUnits("10", 18)
+  await dai.approve(await foreignBridgeErcToNative.getAddress(), amount)
+  tx = await foreignBridgeErcToNative.relayTokens(homeReceiver.address, amount)
+  const { messageArgs: foreignMessageArgs2 } = getRelevantDataFromEvents({
+    bridge: "xdai",
+    topic: USER_REQUEST_FOR_AFFIRMATION_TOPIC,
+    receipt: await tx.wait(1),
+  })
+
+  // NOTE: At this point adapters on Gnosis go down so we need to change them
+  await hre.changeNetwork("fgnosis")
+  homeSigners = await ethers.getSigners()
+  const homeFakeAdapter3 = homeSigners[17]
+  const homeFakeAdapter4 = homeSigners[18]
+  await homeHashiManager
+    .connect(homeProxyOwner)
+    .setExpectedAdaptersHash([homeFakeAdapter3.address, homeFakeAdapter4.address])
+  await hre.changeNetwork("fmainnet")
+  await foreignHashiManager
+    .connect(foreignProxyOwner)
+    .setReportersAdaptersAndThreshold(
+      [foreignFakeReporter1.address, foreignFakeReporter2.address],
+      [homeFakeAdapter3.address, homeFakeAdapter4.address],
+      HASHI_THRESHOLD,
+    )
+
+  // NOTE: once they have been changed, we need to resendDataWithHashi
+  let encodedData = ethers.solidityPacked(["address", "uint256", "bytes32"], foreignMessageArgs2)
+  tx = await foreignBridgeErcToNative.resendDataWithHashi(encodedData)
+  const { hashiMessage: foreignHashiMessage3 } = getRelevantDataFromEvents({
+    onlyHashiMessage: true,
+    receipt: await tx.wait(1),
+    abiCoder,
+    topic: USER_REQUEST_FOR_AFFIRMATION_TOPIC,
+  })
+
+  await hre.changeNetwork("fgnosis")
+  const decodedForeignHashiMessage3 = decodeHashiMessage(foreignHashiMessage3, { abiCoder })
+  await homeYaru.executeMessages([decodeHashiMessage(foreignHashiMessage3, { abiCoder })])
+  if (!(await homeBridgeErcToNative.isApprovedByHashi(ethers.keccak256(decodedForeignHashiMessage3[5]))))
+    throw new Error("Hashi didn't execute the message")
+  await homeBridgeErcToNative.connect(homeValidator1).executeAffirmation(...foreignMessageArgs2)
+  tx = await homeBridgeErcToNative.connect(homeValidator2).executeAffirmation(...foreignMessageArgs2)
+  receipt = await tx.wait()
+  addedReceiverLog = receipt.logs.find((_log) => _log.topics[0] === ADDED_RECEIVER_TOPIC)
+  if (!addedReceiverLog) throw new Error("Ops, AddedReceiver not found")
+  console.log("Ethereum -> Gnosis OK (resendDataWithHashi)")
+
+  // R E S E N D   E X I S T I N G   M E S S A G E        G N O S I S   --->   E T H E R E U M
+  tx = await homeOwner.sendTransaction({
+    to: await homeBridgeErcToNative.getAddress(),
+    value: amount,
+  })
+  const { hashiMessage: homeHashiMessage2, message: homeMessage2 } = getRelevantDataFromEvents({
+    bridge: "xdai",
+    receipt: await tx.wait(),
+    topic: USER_REQUEST_FOR_SIGNATURE_TOPIC,
+  })
+
+  const [receiver2, value2, nonce2] = abiCoder.decode(["address", "uint256", "bytes32"], homeMessage2)
+  const homeMessageToSign2 = ethers.solidityPacked(
+    ["address", "uint256", "bytes32", "address"],
+    [receiver2, value2, nonce2, await foreignBridgeErcToNative.getAddress()],
+  )
+
+  signatures = await getValidatorsSignatures({
+    bridge: "xdai",
+    message: homeMessageToSign2,
+    validators: [homeValidator1, homeValidator2],
+  })
+
+  await Promise.all(
+    [homeValidator1, homeValidator2].map((_validator, _index) =>
+      homeBridgeErcToNative.connect(_validator).submitSignature(signatures[_index], homeMessageToSign2),
+    ),
+  )
+
+  // NOTE: At this point adapters on Mainnet go down so we need to change them
+  await hre.changeNetwork("fmainnet")
+  homeSigners = await ethers.getSigners()
+  const foreignFakeAdapter3 = homeSigners[17]
+  const foreignFakeAdapter4 = homeSigners[18]
+  await foreignHashiManager
+    .connect(foreignProxyOwner)
+    .setExpectedAdaptersHash([foreignFakeAdapter3.address, foreignFakeAdapter4.address])
+  await hre.changeNetwork("fgnosis")
+  await homeHashiManager
+    .connect(homeProxyOwner)
+    .setReportersAdaptersAndThreshold(
+      [homeFakeReporter1.address, homeFakeReporter2.address],
+      [foreignFakeAdapter3.address, foreignFakeAdapter4.address],
+      HASHI_THRESHOLD,
+    )
+
+  // NOTE: once they have been changed, we need to resendDataWithHashi
+  encodedData = ethers.solidityPacked(["address", "uint256", "bytes32"], [receiver2, value2, nonce2])
+  tx = await homeBridgeErcToNative.resendDataWithHashi(encodedData)
+  const { hashiMessage: homeHashiMessage3 } = getRelevantDataFromEvents({
+    onlyHashiMessage: true,
+    receipt: await tx.wait(1),
+    abiCoder,
+    topic: USER_REQUEST_FOR_AFFIRMATION_TOPIC,
+  })
+
+  await hre.changeNetwork("fmainnet")
+  balancePre = await dai.balanceOf(homeOwner.address)
+  await foreignYaru.executeMessages([decodeHashiMessage(homeHashiMessage3, { abiCoder })])
+  const decodedHomeHashiMessage2 = decodeHashiMessage(homeHashiMessage2, { abiCoder })
+  if (!(await foreignBridgeErcToNative.isApprovedByHashi(ethers.keccak256(decodedHomeHashiMessage2[5]))))
+    throw new Error("Hashi didn't execute the message")
+  packedSignatures = packSignatures(signatures.map((_sig) => signatureToVrs(_sig)))
+  await foreignBridgeErcToNative.executeSignatures(homeMessageToSign2, packedSignatures)
+  balancePost = await dai.balanceOf(homeOwner.address)
+  if (balancePre + BigInt(amount.toString()) != balancePost) throw new Error("Ops, someting weird happened")
+  console.log("Gnosis -> Ethereum OK (resendDataWithHashi)")
 })

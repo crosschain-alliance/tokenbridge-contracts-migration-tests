@@ -9,6 +9,7 @@ const BRIDGE_VALIDATOR_ADDRESS = "0xa280fed8d7cad9a76c8b50ca5c33c2534ffa5008"
 const HASHI_TARGET_CHAIN_ID = 1
 const HASHI_THRESHOLD = 2
 const MESSAGE_PACKING_VERSION = "00050000"
+const USER_REQUEST_FOR_SIGNATURE_TOPIC = "0x520d2afde79cbd5db58755ac9480f81bc658e5c517fcae7365a3d832590b0183"
 
 // NOTE: be sure to run this in a gnosis chain forked environment
 describe("HomeAMB", () => {
@@ -113,6 +114,19 @@ describe("HomeAMB", () => {
 
   it("should be able to send a message using hashi", async () => {
     await expect(homeAmb.requireToPassMessage(fakeReceiver.address, "0x01", 200000)).to.emit(yaho, "MessageDispatched")
+  })
+
+  it("should be able to re send a existing message using hashi", async () => {
+    const tx = await homeAmb.requireToPassMessage(fakeReceiver.address, "0x01", 200000)
+    const receipt = await tx.wait(1)
+    const log = receipt.logs.find(({ topics }) => topics[0] === USER_REQUEST_FOR_SIGNATURE_TOPIC)
+    const eventData = log.args[1]
+    await expect(homeAmb.resendDataWithHashi(eventData)).to.emit(yaho, "MessageDispatched")
+  })
+
+  it("should not be able to re send a non-existing message using hashi", async () => {
+    const eventData = "0x01"
+    await expect(homeAmb.resendDataWithHashi(eventData)).to.be.reverted
   })
 
   it("should be able to execute an affirmation even without the Hashi approval as it's optional", async () => {
