@@ -20,7 +20,14 @@ module.exports.decodeHashiMessage = (_message, { abiCoder }) => {
   ]
 }
 
-module.exports.getRelevantDataFromEvents = ({ receipt, abiCoder, topic, onlyHashiMessage = false, bridge = "amb" }) => {
+module.exports.getRelevantDataFromEvents = ({
+  receipt,
+  abiCoder,
+  topic,
+  onlyHashiMessage = false,
+  bridge = "amb",
+  ethers,
+}) => {
   const { data: hashiMessage } = receipt.logs.find((_log) => _log.topics[0] === MESSAGE_DISPATCHED_TOPIC)
 
   if (bridge === "amb") {
@@ -32,7 +39,8 @@ module.exports.getRelevantDataFromEvents = ({ receipt, abiCoder, topic, onlyHash
 
     const { data: message } = receipt.logs.find((_log) => _log.topics[0] === topic)
     const [decodedMessage] = abiCoder.decode(["bytes"], message)
-    const messageId = decodedMessage.slice(0, 66)
+    const messageId = ethers.solidityPackedKeccak256(["bytes"], [decodedMessage])
+
     return {
       decodedMessage,
       hashiMessage,

@@ -172,7 +172,7 @@ describe("HomeAMB", () => {
         [fakeAdapter1, fakeAdapter2].map(({ address }) => address),
       ],
     ])
-    expect(await homeAmb.isApprovedByHashi(msgId)).to.be.true
+    expect(await homeAmb.isApprovedByHashi(ethers.solidityPackedKeccak256(["bytes"], [message]))).to.be.true
     await expect(homeAmb.connect(validator2).executeAffirmation(message)).to.emit(homeAmb, "AffirmationCompleted")
   })
 })

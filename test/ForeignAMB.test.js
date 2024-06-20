@@ -179,7 +179,7 @@ describe("ForeignAMB", () => {
         [fakeAdapter1, fakeAdapter2].map(({ address }) => address),
       ],
     ])
-    expect(await foreignAmb.isApprovedByHashi(msgId)).to.be.true
+    expect(await foreignAmb.isApprovedByHashi(ethers.solidityPackedKeccak256(["bytes"], [message]))).to.be.true
 
     const signatures = await Promise.all(
       [validator1, validator2].map((_validator) => _validator.signMessage(append0(ethers.toBeArray(message)))),

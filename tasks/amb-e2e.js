@@ -181,6 +181,7 @@ task("AMB:e2e").setAction(async (_taskArgs, hre) => {
     receipt: await tx.wait(1),
     topic: USER_REQUEST_FOR_AFFIRMATION_TOPIC,
     abiCoder,
+    ethers,
   })
 
   await hre.changeNetwork("fgnosis")
@@ -206,6 +207,7 @@ task("AMB:e2e").setAction(async (_taskArgs, hre) => {
     receipt: await tx.wait(1),
     topic: USER_REQUEST_FOR_SIGNATURE_TOPIC,
     abiCoder,
+    ethers,
   })
 
   signatures = await getValidatorsSignatures({
@@ -235,6 +237,7 @@ task("AMB:e2e").setAction(async (_taskArgs, hre) => {
     receipt: await tx.wait(1),
     topic: USER_REQUEST_FOR_AFFIRMATION_TOPIC,
     abiCoder,
+    ethers,
   })
 
   // NOTE: At this point adapters on Gnosis go down so we need to change them
@@ -261,6 +264,7 @@ task("AMB:e2e").setAction(async (_taskArgs, hre) => {
     receipt: await tx.wait(1),
     abiCoder,
     topic: USER_REQUEST_FOR_AFFIRMATION_TOPIC,
+    ethers,
   })
 
   await hre.changeNetwork("fgnosis")
@@ -279,6 +283,7 @@ task("AMB:e2e").setAction(async (_taskArgs, hre) => {
     receipt: await tx.wait(1),
     topic: USER_REQUEST_FOR_SIGNATURE_TOPIC,
     abiCoder,
+    ethers,
   })
 
   signatures = await getValidatorsSignatures({
@@ -314,6 +319,7 @@ task("AMB:e2e").setAction(async (_taskArgs, hre) => {
     receipt: await tx.wait(1),
     abiCoder,
     topic: USER_REQUEST_FOR_AFFIRMATION_TOPIC,
+    ethers,
   })
 
   await hre.changeNetwork("fmainnet")
