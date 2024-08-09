@@ -11,11 +11,13 @@ const HASHI_THRESHOLD = 2
 const DAI_ADDRESS = "0x6B175474E89094C44Da98b954EedeAC495271d0F"
 const DAI_FAUCET_ADDRESS = "0xD1668fB5F690C59Ab4B0CAbAd0f8C1617895052B"
 const USER_REQUEST_FOR_AFFIRMATION_TOPIC = "0xf6968e689b3d8c24f22c10c2a3256bb5ca483a474e11bac08423baa049e38ae8"
+const MESSAGE_DISPATCHED = "0x218247aabc759e65b5bb92ccc074f9d62cd187259f2a0984c3c9cf91f67ff7cf"
 
 // NOTE: be sure to run this in a mainnet forked environment
 describe("ForeignBridgeErcToNative", () => {
   let foreignBridgeErcToNative,
     proxy,
+    proxyOwner,
     fakeReceiver,
     fakeReporter1,
     fakeReporter2,
@@ -49,7 +51,7 @@ describe("ForeignBridgeErcToNative", () => {
       params: [DAI_FAUCET_ADDRESS],
     })
 
-    const proxyOwner = await ethers.provider.getSigner(OWNER_ADDRESS)
+    proxyOwner = await ethers.provider.getSigner(OWNER_ADDRESS)
     const daiFaucet = await ethers.provider.getSigner(DAI_FAUCET_ADDRESS)
 
     const signers = await ethers.getSigners()
@@ -71,8 +73,7 @@ describe("ForeignBridgeErcToNative", () => {
       value: ethers.parseEther("1"),
     })
 
-    const ForeignBridgeErcToNative = await ethers.getContractFactory("ForeignBridgeErcToNative")
-    const OwnedUpgradeabilityProxy = await ethers.getContractFactory("OwnedUpgradeabilityProxy")
+    const ForeignBridgeErcToNative = await ethers.getContractFactory("XDaiForeignBridge")
     const BridgeValidators = await ethers.getContractFactory("BridgeValidators")
     const HashiManager = await ethers.getContractFactory("HashiManager")
     const EternalStorageProxy = await ethers.getContractFactory("EternalStorageProxy")
@@ -80,7 +81,7 @@ describe("ForeignBridgeErcToNative", () => {
     const MockYaru = await ethers.getContractFactory("MockYaru")
     const Token = await ethers.getContractFactory("Token")
 
-    proxy = await OwnedUpgradeabilityProxy.attach(FOREIGN_XDAI_PROXY_ADDRESS)
+    proxy = await EternalStorageProxy.attach(FOREIGN_XDAI_PROXY_ADDRESS)
     bridgeValidators = await BridgeValidators.attach(BRIDGE_VALIDATOR_ADDRESS)
 
     foreignBridgeErcToNative = await ForeignBridgeErcToNative.deploy()
@@ -125,18 +126,137 @@ describe("ForeignBridgeErcToNative", () => {
 
   it("should be able to relay 10 dai", async () => {
     const amount = ethers.parseUnits("10", 18)
+    const bridgeBalanceBefore = await dai.balanceOf(await foreignBridgeErcToNative.getAddress())
     await dai.approve(await foreignBridgeErcToNative.getAddress(), amount)
-    await expect(foreignBridgeErcToNative.relayTokens(fakeReceiver.address, amount)).to.emit(yaho, "MessageDispatched")
+    await expect(foreignBridgeErcToNative.relayTokens(fakeReceiver.address, amount))
+      .to.emit(yaho, "MessageDispatched")
+      .to.emit(foreignBridgeErcToNative, "UserRequestForAffirmation")
+      .to.emit(dai, "Transfer")
+
+    expect(bridgeBalanceBefore + amount).to.eq(await dai.balanceOf(await foreignBridgeErcToNative.getAddress()))
+  })
+
+  it("should not be able to transfer DAI directly", async () => {
+    const amount = ethers.parseUnits("10", 18)
+    const bridgeBalanceBefore = await dai.balanceOf(await foreignBridgeErcToNative.getAddress())
+    await expect(dai.transfer(await foreignBridgeErcToNative.getAddress(), amount))
+      .to.emit(dai, "Transfer")
+      .to.not.emit(foreignBridgeErcToNative, "UserRequestForAffirmation")
+      .to.not.emit(yaho, "MessageDispatched")
+
+    expect(bridgeBalanceBefore + amount).to.equal(await dai.balanceOf(await foreignBridgeErcToNative.getAddress()))
+  })
+
+  it("should be able to withdraw DAI accidentally locked in the bridge using transfer method", async () => {
+    //recoverLegacyTransfer
+    const amount = ethers.parseUnits("10", 18)
+
+    await dai.transfer(await foreignBridgeErcToNative.getAddress(), amount)
+    const bridgeBalanceBefore = await dai.balanceOf(await foreignBridgeErcToNative.getAddress())
+
+    const receiverBalanceBefore = await dai.balanceOf(fakeReceiver.address)
+
+    const proxyOwner = await ethers.provider.getSigner(OWNER_ADDRESS)
+    await expect(foreignBridgeErcToNative.connect(proxyOwner).recoverLegacyTransfer(fakeReceiver.address)).to.emit(
+      dai,
+      "Transfer",
+    )
+
+    expect(await dai.balanceOf(await foreignBridgeErcToNative.getAddress())).to.equal(0)
+    expect(await dai.balanceOf(fakeReceiver.address)).to.equal(receiverBalanceBefore + bridgeBalanceBefore)
+  })
+
+  it("should invest and pay interest from  sDAI ", async () => {
+    const sDAI = await ethers.getContractAt("ISavingsDai", "0x83F20F44975D03b1b09e64809B757c47f942BEeA")
+
+    expect(await foreignBridgeErcToNative.isInterestEnabled(DAI_ADDRESS)).to.equal(true)
+
+    const sDAIBalanceBeforeInvest = await sDAI.balanceOf(await foreignBridgeErcToNative.getAddress())
+    const interestAmountBeforeInvest = await foreignBridgeErcToNative.interestAmount(DAI_ADDRESS)
+
+    await foreignBridgeErcToNative.investDai()
+    await network.provider.send("evm_increaseTime", [3600000])
+
+    const sDAIBalanceAfterInvest = await sDAI.balanceOf(await foreignBridgeErcToNative.getAddress())
+    const interestAmountAfterInvest = await foreignBridgeErcToNative.interestAmount(DAI_ADDRESS)
+
+    expect(await dai.balanceOf(await foreignBridgeErcToNative.getAddress())).to.equal(
+      await foreignBridgeErcToNative.minCashThreshold(DAI_ADDRESS),
+    )
+
+    expect(sDAIBalanceAfterInvest).to.greaterThan(sDAIBalanceBeforeInvest)
+    expect(interestAmountAfterInvest).to.greaterThan(interestAmountBeforeInvest)
+
+    // interest is relayed to interest receiver on Gnosis Chain
+    await expect(
+      foreignBridgeErcToNative.payInterest(DAI_ADDRESS, await foreignBridgeErcToNative.interestAmount(DAI_ADDRESS)),
+    )
+      .to.emit(foreignBridgeErcToNative, "PaidInterest")
+      .to.emit(foreignBridgeErcToNative, "UserRequestForAffirmation")
+
+    expect(await dai.balanceOf(await foreignBridgeErcToNative.getAddress())).to.equal(
+      await foreignBridgeErcToNative.minCashThreshold(DAI_ADDRESS),
+    )
+
+    expect(await sDAI.balanceOf(await foreignBridgeErcToNative.getAddress())).to.equal(sDAIBalanceAfterInvest)
+    expect(await foreignBridgeErcToNative.interestAmount(DAI_ADDRESS)).to.greaterThan(interestAmountAfterInvest)
   })
 
   it("should be able to re send an existing message using hashi", async () => {
     const amount = ethers.parseUnits("10", 18)
     await dai.approve(await foreignBridgeErcToNative.getAddress(), amount)
+
     const tx = await foreignBridgeErcToNative.relayTokens(fakeReceiver.address, amount)
     const receipt = await tx.wait(1)
+
     const log = receipt.logs.find(({ topics }) => topics[0] === USER_REQUEST_FOR_AFFIRMATION_TOPIC)
+
     const encodedData = ethers.solidityPacked(["address", "uint256", "bytes32"], log.args)
+
     await expect(foreignBridgeErcToNative.resendDataWithHashi(encodedData)).to.emit(yaho, "MessageDispatched")
+  })
+
+  it("should be able to change Hashi oracles set and re-send an existing message using hashi", async () => {
+    const amount = ethers.parseUnits("10", 18)
+    await dai.approve(await foreignBridgeErcToNative.getAddress(), amount)
+    const tx = await foreignBridgeErcToNative.relayTokens(fakeReceiver.address, amount)
+    const receipt = await tx.wait(1)
+    const requestLog = receipt.logs.find(({ topics }) => topics[0] === USER_REQUEST_FOR_AFFIRMATION_TOPIC)
+    const dispatchedLog = receipt.logs.find(({ topics }) => topics[0] === MESSAGE_DISPATCHED)
+    const encodedData = ethers.solidityPacked(["address", "uint256", "bytes32"], requestLog.args)
+
+    // First tx includes original set of reporters and adapters
+    expect(dispatchedLog.data.includes(fakeReporter1.address.slice(2).toLowerCase())).to.equal(true)
+    expect(dispatchedLog.data.includes(fakeReporter2.address.slice(2).toLowerCase())).to.equal(true)
+    expect(dispatchedLog.data.includes(fakeAdapter1.address.slice(2).toLowerCase())).to.equal(true)
+    expect(dispatchedLog.data.includes(fakeAdapter2.address.slice(2).toLowerCase())).to.equal(true)
+
+    let newFakeReporter1 = ethers.Wallet.createRandom().connect(ethers.provider)
+    let newFakeReporter2 = ethers.Wallet.createRandom().connect(ethers.provider)
+    let newFakeAdapter1 = ethers.Wallet.createRandom().connect(ethers.provider)
+    let newFakeAdapter2 = ethers.Wallet.createRandom().connect(ethers.provider)
+
+    // update reporters and adapters in Hashi Manager
+    await hashiManager
+      .connect(proxyOwner)
+      .setReportersAdaptersAndThreshold(
+        [newFakeReporter1.address, newFakeReporter2.address],
+        [newFakeAdapter1.address, newFakeAdapter2.address],
+        HASHI_THRESHOLD,
+      )
+    const resendTx = await foreignBridgeErcToNative.resendDataWithHashi(encodedData)
+    const resendReceipt = await resendTx.wait(1)
+    const reDispatchedLog = resendReceipt.logs.find(({ topics }) => topics[0] === MESSAGE_DISPATCHED)
+
+    // resent message only includes new oracle sets
+    expect(reDispatchedLog.data.includes(newFakeReporter1.address.slice(2).toLowerCase())).to.equal(true)
+    expect(reDispatchedLog.data.includes(newFakeReporter2.address.slice(2).toLowerCase())).to.equal(true)
+    expect(reDispatchedLog.data.includes(newFakeAdapter1.address.slice(2).toLowerCase())).to.equal(true)
+    expect(reDispatchedLog.data.includes(newFakeAdapter2.address.slice(2).toLowerCase())).to.equal(true)
+    expect(reDispatchedLog.data.includes(fakeReporter1.address.slice(2).toLowerCase())).to.equal(false)
+    expect(reDispatchedLog.data.includes(fakeReporter2.address.slice(2).toLowerCase())).to.equal(false)
+    expect(reDispatchedLog.data.includes(fakeAdapter1.address.slice(2).toLowerCase())).to.equal(false)
+    expect(reDispatchedLog.data.includes(fakeAdapter2.address.slice(2).toLowerCase())).to.equal(false)
   })
 
   it("should not be able to re send an non-existing message using hashi", async () => {
@@ -156,7 +276,9 @@ describe("ForeignBridgeErcToNative", () => {
       [validator1, validator2].map((_validator) => _validator.signMessage(ethers.toBeArray(message))),
     )
     const packedSignatures = packSignatures(signatures.map((_sig) => signatureToVrs(_sig)))
-    await expect(foreignBridgeErcToNative.executeSignatures(message, packedSignatures)).to.emit(dai, "Transfer")
+    await expect(foreignBridgeErcToNative.executeSignatures(message, packedSignatures))
+      .to.emit(dai, "Transfer")
+      .to.emit(foreignBridgeErcToNative, "RelayedMessage")
     await expect(foreignBridgeErcToNative.executeSignatures(message, packedSignatures)).to.be.reverted
   })
 
@@ -173,6 +295,7 @@ describe("ForeignBridgeErcToNative", () => {
     )
     const packedSignatures = packSignatures(signatures.map((_sig) => signatureToVrs(_sig)))
     const hashiMessage = ethers.solidityPacked(["address", "uint256", "bytes32"], [fakeReceiver.address, amount, nonce])
+    // cause error
     await yaru.executeMessages([
       [
         1,
@@ -186,7 +309,9 @@ describe("ForeignBridgeErcToNative", () => {
       ],
     ])
     expect(await foreignBridgeErcToNative.isApprovedByHashi(ethers.keccak256(hashiMessage))).to.be.true
-    await expect(foreignBridgeErcToNative.executeSignatures(message, packedSignatures)).to.emit(dai, "Transfer")
+    await expect(foreignBridgeErcToNative.executeSignatures(message, packedSignatures))
+      .to.emit(dai, "Transfer")
+      .to.emit(foreignBridgeErcToNative, "RelayedMessage")
     await expect(foreignBridgeErcToNative.executeSignatures(message, packedSignatures)).to.be.reverted
   })
 })

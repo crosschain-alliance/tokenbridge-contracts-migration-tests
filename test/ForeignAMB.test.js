@@ -65,14 +65,13 @@ describe("ForeignAMB", () => {
     })
 
     const ForeignAMB = await ethers.getContractFactory("ForeignAMB")
-    const OwnedUpgradeabilityProxy = await ethers.getContractFactory("OwnedUpgradeabilityProxy")
     const BridgeValidators = await ethers.getContractFactory("BridgeValidators")
     const HashiManager = await ethers.getContractFactory("HashiManager")
     const EternalStorageProxy = await ethers.getContractFactory("EternalStorageProxy")
     const MockYaho = await ethers.getContractFactory("MockYaho")
     const MockYaru = await ethers.getContractFactory("MockYaru")
 
-    proxy = await OwnedUpgradeabilityProxy.attach(FOREIGN_AMB_PROXY_ADDRESS)
+    proxy = await EternalStorageProxy.attach(FOREIGN_AMB_PROXY_ADDRESS)
     bridgeValidators = await BridgeValidators.attach(BRIDGE_VALIDATOR_ADDRESS)
 
     foreignAmb = await ForeignAMB.deploy()
