@@ -5,7 +5,10 @@ const { strip0x } = require("./utils")
 
 const HOME_OMNIBRIDGE_PROXY_ADDRESS = "0xf6A78083ca3e2a662D6dd1703c939c8aCE2e268d"
 const HOME_AMB_PROXY_ADDRESS = "0x75Df5AF045d91108662D8080fD1FEFAd6aA0bb59"
+const FOREIGN_AMB_PROXY_ADDRESS = "0x4C36d2919e407f0Cc2Ee3c993ccF8ac26d9CE64e"
+const FOREIGN_OMNIBRIDGE_PROXY_ADDRESS = "0x88ad09518695c6c3712ac10a214be5109a655671"
 const OWNER_ADDRESS = "0x7a48dac683da91e4faa5ab13d91ab5fd170875bd"
+
 const BRIDGE_VALIDATOR_ADDRESS = "0xa280fed8d7cad9a76c8b50ca5c33c2534ffa5008"
 const HASHI_TARGET_CHAIN_ID = 1
 const HASHI_THRESHOLD = 2
@@ -15,6 +18,7 @@ const WRAPPED_GNO = "0x9C58BAcC331c9aa871AFD802DB6379a98e80CEdb"
 const WRAPPED_USDC = "0xDDAfbb505ad214D7b80b1f830fcCc89B60fb7A83"
 const WRAPPED_USDT = "0x4ECaBa5870353805a9F068101A40E0f32ed605C6"
 const WRAPPED_WETH = "0x6A023CCd1ff6F2045C3309768eAd9E68F978f6e1"
+const GNO = "0x6810e776880C02933D47DB1b9fc05908e5386b96"
 
 const GNO_WHALE = "0xEFBBfB08115B0F6a2825A9a186baA5777F5d2494"
 const USDC_WHALE = "0x4E51f628Ec0813964c13107fFfa4C989069E5575"
@@ -81,10 +85,10 @@ describe("HomeOmnibridge", () => {
     })
 
     homeOmnibridge = await ethers.getContractAt("IHomeOmnibridge", HOME_OMNIBRIDGE_PROXY_ADDRESS)
-    wrappedGNO = await ethers.getContractAt("IERC20", WRAPPED_GNO)
-    wrappedUSDC = await ethers.getContractAt("IERC20", WRAPPED_USDC)
-    wrappedUSDT = await ethers.getContractAt("IERC20", WRAPPED_USDT)
-    wrappedWETH = await ethers.getContractAt("IERC20", WRAPPED_WETH)
+    wrappedGNO = await ethers.getContractAt("IPermittableToken", WRAPPED_GNO)
+    wrappedUSDC = await ethers.getContractAt("IPermittableToken", WRAPPED_USDC)
+    wrappedUSDT = await ethers.getContractAt("IPermittableToken", WRAPPED_USDT)
+    wrappedWETH = await ethers.getContractAt("IPermittableToken", WRAPPED_WETH)
     const HomeAMB = await ethers.getContractFactory("HomeAMB")
 
     const BridgeValidators = await ethers.getContractFactory("BridgeValidators")
@@ -99,7 +103,6 @@ describe("HomeOmnibridge", () => {
     homeAmb = await HomeAMB.deploy()
     await proxy.connect(proxyOwner).upgradeTo("6", await homeAmb.getAddress())
     homeAmb = HomeAMB.attach(await proxy.getAddress())
-    await homeOmnibridge.connect(proxyOwner).setBridgeContract(await proxy.getAddress())
 
     yaho = await MockYaho.deploy()
     yaru = await MockYaru.deploy(HASHI_TARGET_CHAIN_ID)
@@ -121,7 +124,7 @@ describe("HomeOmnibridge", () => {
         HASHI_THRESHOLD,
       )
     await hashiManager.connect(proxyOwner).setYaho(await yaho.getAddress())
-    await hashiManager.connect(proxyOwner).setTargetAddress(fakeTargetAmb.address)
+    await hashiManager.connect(proxyOwner).setTargetAddress(FOREIGN_AMB_PROXY_ADDRESS)
     await hashiManager.connect(proxyOwner).setYaru(await yaru.getAddress())
     await hashiManager.connect(proxyOwner).setExpectedThreshold(HASHI_THRESHOLD)
     await hashiManager
@@ -210,14 +213,14 @@ describe("HomeOmnibridge", () => {
   it("should be able to execute an affirmation even without the Hashi approval as it's optional", async () => {
     expect(await homeOmnibridge.bridgeContract()).to.equal(await homeAmb.getAddress())
 
-    const usdtAmount = ethers.parseUnits("10", 6)
-    const usdtAmountBefore = await wrappedUSDT.balanceOf(fakeReceiver.address)
-    const bridgeUSDTAmountBefore = await wrappedUSDT.balanceOf(await homeOmnibridge.getAddress())
-    const msgId = "0x" + MESSAGE_PACKING_VERSION.padEnd(63, "0") + "1"
+    const gnoAmount = ethers.parseUnits("1", 18)
+    const gnoAmountBefore = await wrappedGNO.balanceOf(fakeReceiver.address)
+    const bridgeGNOAmountBefore = await wrappedGNO.balanceOf(HOME_OMNIBRIDGE_PROXY_ADDRESS)
+    const msgId = "0x" + MESSAGE_PACKING_VERSION.padEnd(63, "0") + "9"
     const message =
       `${msgId}` +
-      "88ad09518695c6c3712ac10a214be5109a655671" + // sender: foreign Omnibridge
-      `${strip0x(HOME_OMNIBRIDGE_PROXY_ADDRESS)}` + // contractAddress
+      `${strip0x(FOREIGN_OMNIBRIDGE_PROXY_ADDRESS)}` + // sender: foreign Omnibridge
+      `${strip0x(HOME_OMNIBRIDGE_PROXY_ADDRESS)}` + // executor: home Omnibridge
       "001e8480" + // gasLimit
       "01" + // source chain id length
       "01" + // destination chain id length
@@ -225,29 +228,33 @@ describe("HomeOmnibridge", () => {
       "01" + // source chain id
       "64" + // destination chain id
       "125e4cfb" + // function signature (handle bridged Token)
-      `${strip0x(WRAPPED_USDT).padStart(64, "0")}` +
+      `${strip0x(GNO).padStart(64, "0")}` +
       `${strip0x(fakeReceiver.address).padStart(64, "0")}` +
-      `${strip0x(ethers.toBeHex(usdtAmount)).padStart(64, "0")}`
+      `${strip0x(ethers.toBeHex(gnoAmount)).padStart(64, "0")}`
 
     await expect(homeAmb.connect(validator1).executeAffirmation(message)).to.emit(homeAmb, "SignedForAffirmation")
 
     await expect(homeAmb.connect(validator2).executeAffirmation(message))
       .to.emit(homeAmb, "AffirmationCompleted")
       .to.emit(homeAmb, "SignedForAffirmation")
-    // TODO: fix .to.emit(homeOmnibridge, "TokensBridged")
+      .to.emit(homeOmnibridge, "TokensBridged")
     await expect(homeAmb.connect(validator1).executeAffirmation(message)).to.be.reverted
 
-    // expect(await wrappedUSDT.balanceOf(fakeReceiver.address)).to.equal(usdtAmountBefore + usdtAmount)
-    // expect(await wrappedUSDT.balanceOf(await homeOmnibridge.getAddress())).to.equal(bridgeUSDTAmountBefore)
+    expect(await wrappedGNO.balanceOf(fakeReceiver.address)).to.equal(gnoAmountBefore + gnoAmount)
+    expect(await wrappedGNO.balanceOf(HOME_OMNIBRIDGE_PROXY_ADDRESS)).to.equal(bridgeGNOAmountBefore)
   })
 
   it("should be able to execute an affirmation with a validator after that an affirmation has been confirmed by hashi", async () => {
-    const usdtAmount = ethers.parseUnits("10", 6)
+    expect(await homeOmnibridge.bridgeContract()).to.equal(await homeAmb.getAddress())
+    const gnoAmount = ethers.parseUnits("10", 18)
+    const gnoAmountBefore = await wrappedGNO.balanceOf(fakeReceiver.address)
+    const bridgeGNOAmountBefore = await wrappedGNO.balanceOf(HOME_OMNIBRIDGE_PROXY_ADDRESS)
     const msgId = "0x" + MESSAGE_PACKING_VERSION.padEnd(63, "0") + "1"
     const message =
       `${msgId}` +
-      "88ad09518695c6c3712ac10a214be5109a655671" + // sender: foreign Omnibridge
-      `${strip0x(HOME_OMNIBRIDGE_PROXY_ADDRESS)}` + // contractAddress
+      `${strip0x(FOREIGN_OMNIBRIDGE_PROXY_ADDRESS)}` + // sender: foreign Omnibridge
+      `${strip0x(HOME_OMNIBRIDGE_PROXY_ADDRESS)}` +
+      //   `${strip0x(HOME_OMNIBRIDGE_PROXY_ADDRESS)}` + // contractAddress
       "001e8480" + // gasLimit
       "01" + // source chain id length
       "01" + // destination chain id length
@@ -255,24 +262,34 @@ describe("HomeOmnibridge", () => {
       "01" + // source chain id
       "64" + // destination chain id
       "125e4cfb" + // function signature (handle bridged Token)
-      `${strip0x(WRAPPED_USDT).padStart(64, "0")}` +
+      `${strip0x(GNO).padStart(64, "0")}` +
       `${strip0x(fakeReceiver.address).padStart(64, "0")}` +
-      `${strip0x(ethers.toBeHex(usdtAmount)).padStart(64, "0")}`
+      `${strip0x(ethers.toBeHex(gnoAmount)).padStart(64, "0")}`
 
     await yaru.executeMessages([
       [
         1, // nonce
         100, // target chain id
         2, // threshold
-        fakeTargetAmb.address,
-        await homeAmb.getAddress(), // receiver
+        FOREIGN_AMB_PROXY_ADDRESS,
+        HOME_AMB_PROXY_ADDRESS, // receiver
         message,
         [fakeReporter1, fakeReporter2].map(({ address }) => address),
         [fakeAdapter1, fakeAdapter2].map(({ address }) => address),
       ],
     ])
     expect(await homeAmb.isApprovedByHashi(ethers.solidityPackedKeccak256(["bytes"], [message]))).to.be.true
-    // TODO: fix
-    // await expect(homeAmb.connect(validator2).executeAffirmation(message)).to.emit(homeAmb, "AffirmationCompleted")
+    // TODO: fix revert at BasicOmnibrige._releaseTokens
+    await expect(homeAmb.connect(validator1).executeAffirmation(message)).to.emit(homeAmb, "SignedForAffirmation")
+
+    await expect(homeAmb.connect(validator2).executeAffirmation(message))
+      .to.emit(homeAmb, "AffirmationCompleted")
+      .to.emit(homeAmb, "SignedForAffirmation")
+      .to.emit(homeOmnibridge, "TokensBridged")
+
+    await expect(homeAmb.connect(validator1).executeAffirmation(message)).to.be.reverted
+
+    expect(await wrappedGNO.balanceOf(fakeReceiver.address)).to.equal(gnoAmountBefore + gnoAmount)
+    expect(await wrappedGNO.balanceOf(HOME_OMNIBRIDGE_PROXY_ADDRESS)).to.equal(bridgeGNOAmountBefore)
   })
 })

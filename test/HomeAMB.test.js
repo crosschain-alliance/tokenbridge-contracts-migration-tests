@@ -159,7 +159,6 @@ describe("HomeAMB", () => {
       "64" + // destination chain id
       "11" // data
 
-    await homeAmb.connect(validator1).executeAffirmation(message)
     await yaru.executeMessages([
       [
         1, // nonce
@@ -173,6 +172,7 @@ describe("HomeAMB", () => {
       ],
     ])
     expect(await homeAmb.isApprovedByHashi(ethers.solidityPackedKeccak256(["bytes"], [message]))).to.be.true
+    await homeAmb.connect(validator1).executeAffirmation(message)
     await expect(homeAmb.connect(validator2).executeAffirmation(message)).to.emit(homeAmb, "AffirmationCompleted")
   })
 })
