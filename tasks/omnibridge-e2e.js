@@ -138,8 +138,9 @@ task("Omnibridge:e2e").setAction(async (_taskArgs, hre) => {
   const homeFakeAdapter1 = homeSigners[11]
   const homeFakeReporter2 = homeSigners[12]
   const homeFakeAdapter2 = homeSigners[13]
-  const homeValidator1 = homeSigners[14]
-  const homeValidator2 = homeSigners[15]
+  const homeValidator1 = homeSigners[6]
+
+  const homeValidator2 = homeSigners[7]
 
   let wrappedGNO = await ethers.getContractAt("IPermittableToken", WRAPPED_GNO)
 
@@ -151,6 +152,8 @@ task("Omnibridge:e2e").setAction(async (_taskArgs, hre) => {
     to: HOME_OWNER_ADDRESS,
     value: ethers.parseEther("1"),
   })
+
+  let gnoWhaleOnGnosis = await ethers.provider.getSigner(GNO_WHALE)
 
   const homeProxy = await EternalStorageProxy.attach(HOME_AMB_PROXY_ADDRESS)
   const homeBridgeValidators = await BridgeValidators.attach(HOME_BRIDGE_VALIDATOR_ADDRESS)
@@ -204,7 +207,7 @@ task("Omnibridge:e2e").setAction(async (_taskArgs, hre) => {
   console.log("Initial Configuration done ")
   // Relay GNO from Ethereum
 
-  console.log("Relaying GNO from Ethereum")
+  // console.log("Relaying GNO from Ethereum")
   await network.provider.request({
     method: "hardhat_impersonateAccount",
     params: [GNO_WHALE],
@@ -214,9 +217,6 @@ task("Omnibridge:e2e").setAction(async (_taskArgs, hre) => {
   const gnoAmount = ethers.parseUnits("10", 18)
 
   await gno.connect(gnoWhale).approve(FOREIGN_OMNIBRIDGE_PROXY_ADDRESS, await gno.balanceOf(GNO_WHALE))
-
-  console.log("Sender's GNO balance ", await gno.balanceOf(GNO_WHALE))
-  console.log("Bridge allowance ", await gno.allowance(GNO_WHALE, FOREIGN_OMNIBRIDGE_PROXY_ADDRESS))
 
   let tx = await foreignOmnibridge.connect(gnoWhale).relayTokens(GNO_ADDRESS, gnoWhale, gnoAmount)
 
@@ -243,7 +243,7 @@ task("Omnibridge:e2e").setAction(async (_taskArgs, hre) => {
   tx = await homeAmb.connect(homeValidator2).executeAffirmation(decodedForeignMessage)
 
   if ((await wrappedGNO.balanceOf(GNO_WHALE)) == wrappedGNOBalanceBefore + gnoAmount) {
-    console.log("GNO successfully relay to receiver on Gnosis")
+    console.log("GNO successfully relayed to receiver on Gnosis")
   } else {
     console.log("Failed to relay GNO on Gnosis")
   }
@@ -265,16 +265,15 @@ task("Omnibridge:e2e").setAction(async (_taskArgs, hre) => {
     params: [GNO_WHALE],
   })
 
-  gnoWhale = await ethers.provider.getSigner(GNO_WHALE)
   wrappedGNOBalanceBefore = await wrappedGNO.balanceOf(GNO_WHALE)
 
   console.log("Sender's wrapped_GNO balance before relay", wrappedGNOBalanceBefore)
 
-  await wrappedGNO.connect(gnoWhale).approve(HOME_OMNIBRIDGE_PROXY_ADDRESS, gnoAmount)
+  await wrappedGNO.connect(gnoWhaleOnGnosis).approve(HOME_OMNIBRIDGE_PROXY_ADDRESS, gnoAmount)
 
   await wrappedGNO.allowance(GNO_WHALE, HOME_OMNIBRIDGE_PROXY_ADDRESS)
 
-  tx = await homeOmnibridge.connect(gnoWhale).relayTokens(WRAPPED_GNO, GNO_WHALE, gnoAmount)
+  tx = await homeOmnibridge.connect(gnoWhaleOnGnosis).relayTokens(WRAPPED_GNO, GNO_WHALE, gnoAmount)
 
   const {
     hashiMessage: homeHashiMessage,
@@ -292,7 +291,6 @@ task("Omnibridge:e2e").setAction(async (_taskArgs, hre) => {
     validators: [homeValidator1, homeValidator2],
   })
 
-  console.log("signatures ", signatures)
   await Promise.all(
     [homeValidator1, homeValidator2].map((_validator, _index) =>
       homeAmb.connect(_validator).submitSignature(signatures[_index], decodedHomeMessage),
@@ -307,15 +305,15 @@ task("Omnibridge:e2e").setAction(async (_taskArgs, hre) => {
 
   await network.provider.request({
     method: "hardhat_impersonateAccount",
-    params: [GNO_WHALE],
+    params: [FOREIGN_OWNER_ADDRESS],
   })
 
   //   // NOTE: if Hashi is enabled the handleMessage fx is invoked with Hashi message execution
   await foreignYaru.executeMessages([decodeHashiMessage(homeHashiMessage, { abiCoder })])
   if (!(await foreignAmb.isApprovedByHashi(homeMessageId))) throw new Error("Hashi didn't execute the message")
   let packedSignatures = packSignatures(signatures.map((_sig) => signatureToVrs(_sig)))
-  console.log("packed Signatures ", packedSignatures)
-  await foreignAmb.connect(foreignProxyOwner).executeSignatures(decodedHomeMessage, packedSignatures)
+
+  await foreignAmb.executeSignatures(decodedHomeMessage, packedSignatures)
 
   if ((await gno.balanceOf(GNO_WHALE)) == gnoBalanceBefore + gnoAmount) {
     console.log("Wrapped GNO relayed from Gnosis to Ethereum succeed")
@@ -325,11 +323,9 @@ task("Omnibridge:e2e").setAction(async (_taskArgs, hre) => {
 
   console.log("Gnosis -> Ethereum OK")
 
-  //   // R E S E N D   E X I S T I N G   M E S S A G E        E T H E R E U M   --->   G N O S I S
+  // R E S E N D   E X I S T I N G   M E S S A G E        E T H E R E U M   --->   G N O S I S
 
   console.log("Resend data and change oracle set")
-
-  gnoWhale = await ethers.provider.getSigner(GNO_WHALE)
 
   await gno.connect(gnoWhale).approve(FOREIGN_OMNIBRIDGE_PROXY_ADDRESS, await gno.balanceOf(GNO_WHALE))
 
@@ -362,6 +358,7 @@ task("Omnibridge:e2e").setAction(async (_taskArgs, hre) => {
     receipt: await tx.wait(1),
     abiCoder,
     topic: USER_REQUEST_FOR_AFFIRMATION_TOPIC,
+    onlyHashiMessage: true,
     ethers,
   })
 
@@ -402,17 +399,15 @@ task("Omnibridge:e2e").setAction(async (_taskArgs, hre) => {
     params: [GNO_WHALE],
   })
 
-  gnoWhale = await ethers.provider.getSigner(GNO_WHALE)
-
   wrappedGNOBalanceBefore = await wrappedGNO.balanceOf(GNO_WHALE)
 
   console.log("Sender's wrapped balance before relay from GNO", wrappedGNOBalanceBefore)
 
-  approve = await wrappedGNO.connect(gnoWhale).approve(HOME_OMNIBRIDGE_PROXY_ADDRESS, gnoAmount)
+  approve = await wrappedGNO.connect(gnoWhaleOnGnosis).approve(HOME_OMNIBRIDGE_PROXY_ADDRESS, gnoAmount)
   allowance = await wrappedGNO.allowance(GNO_WHALE, HOME_OMNIBRIDGE_PROXY_ADDRESS)
 
   console.log("Relay wrapped GNO from Gnosis")
-  tx = await homeOmnibridge.connect(gnoWhale).relayTokens(WRAPPED_GNO, GNO_WHALE, gnoAmount)
+  tx = await homeOmnibridge.connect(gnoWhaleOnGnosis).relayTokens(WRAPPED_GNO, GNO_WHALE, gnoAmount)
 
   const {
     hashiMessage: homeHashiMessage2,
@@ -428,24 +423,21 @@ task("Omnibridge:e2e").setAction(async (_taskArgs, hre) => {
   console.log("Resend data with Hashi")
   tx = await homeAmb.connect(homeProxyOwner).resendDataWithHashi(decodedHomeMessage2)
 
-  const {
-    hashiMessage: homeHashiMessage3,
-    decodedMessage: decodedHomeMessage3,
-    messageId: homeMessageId3,
-  } = getRelevantDataFromEvents({
-    receipt: relayTokensFromGNOReceipt,
+  const { hashiMessage: homeHashiMessage3 } = getRelevantDataFromEvents({
+    receipt: await tx.wait(1),
     topic: USER_REQUEST_FOR_SIGNATURE_TOPIC,
+    onlyHashiMessage: true,
     abiCoder,
     ethers,
   })
 
   signatures = await getValidatorsSignatures({
-    message: decodedHomeMessage3,
+    message: decodedHomeMessage2,
     validators: [homeValidator1, homeValidator2],
   })
   await Promise.all(
     [homeValidator1, homeValidator2].map((_validator, _index) =>
-      homeAmb.connect(_validator).submitSignature(signatures[_index], decodedHomeMessage3),
+      homeAmb.connect(_validator).submitSignature(signatures[_index], decodedHomeMessage2),
     ),
   )
 
@@ -453,19 +445,14 @@ task("Omnibridge:e2e").setAction(async (_taskArgs, hre) => {
 
   console.log("Switching to Ethereum")
 
-  await network.provider.request({
-    method: "hardhat_impersonateAccount",
-    params: [GNO_WHALE],
-  })
-
   gnoBalanceBefore = await gno.balanceOf(GNO_WHALE)
 
-  // TODO: fix reverted
+  await foreignHashiManager.connect(foreignProxyOwner).setExpectedAdaptersHash([foreignFakeAdapter2.address])
 
   await foreignYaru.executeMessages([decodeHashiMessage(homeHashiMessage3, { abiCoder })])
-  if (!(await foreignAmb.isApprovedByHashi(homeMessageId3))) throw new Error("Hashi didn't execute the message")
+  if (!(await foreignAmb.isApprovedByHashi(homeMessageId2))) throw new Error("Hashi didn't execute the message")
   packedSignatures = packSignatures(signatures.map((_sig) => signatureToVrs(_sig)))
-  await foreignAmb.executeSignatures(decodedHomeMessage3, packedSignatures)
+  await foreignAmb.executeSignatures(decodedHomeMessage2, packedSignatures)
 
   if ((await gno.balanceOf(GNO_WHALE)) == gnoBalanceBefore + gnoAmount) {
     console.log("Resend data with Hashi from Gnosis is successful")
