@@ -9,7 +9,10 @@ interface IForeignOmnibridge {
     event OwnershipTransferred(address previousOwner, address newOwner);
     event TokensBridged(address indexed token, address indexed recipient, uint256 value, bytes32 indexed messageId);
     event TokensBridgingInitiated(
-        address indexed token, address indexed sender, uint256 value, bytes32 indexed messageId
+        address indexed token,
+        address indexed sender,
+        uint256 value,
+        bytes32 indexed messageId
     );
 
     function bridgeContract() external view returns (address);
@@ -43,11 +46,14 @@ interface IForeignOmnibridge {
     function getBridgeMode() external pure returns (bytes4 _data);
     function getCurrentDay() external view returns (uint256);
     function handleBridgedTokens(address _token, address _recipient, uint256 _value) external;
-    function handleBridgedTokensAndCall(address _token, address _recipient, uint256 _value, bytes memory _data)
-        external;
+    function handleBridgedTokensAndCall(
+        address _token,
+        address _recipient,
+        uint256 _value,
+        bytes memory _data
+    ) external;
     function handleNativeTokens(address _token, address _recipient, uint256 _value) external;
-    function handleNativeTokensAndCall(address _token, address _recipient, uint256 _value, bytes memory _data)
-        external;
+    function handleNativeTokensAndCall(address _token, address _recipient, uint256 _value, bytes memory _data) external;
     function initialize(
         address _bridgeContract,
         address _mediatorContract,

@@ -7,7 +7,7 @@ const FOREIGN_AMB_PROXY_ADDRESS = "0x4C36d2919e407f0Cc2Ee3c993ccF8ac26d9CE64e"
 const FOREIGN_OMNIBRIDGE_PROXY_ADDRESS = "0x88ad09518695c6c3712AC10a214bE5109a655671"
 const FOREIGN_OWNER_ADDRESS = "0x42F38ec5A75acCEc50054671233dfAC9C0E7A3F6"
 const FOREIGN_BRIDGE_VALIDATOR_ADDRESS = "0xed84a648b3c51432ad0fD1C2cD2C45677E9d4064"
-const WETH_OMNIBRIDGE_ROUTER_ADDRESS = "0xa6439Ca0FCbA1d0F80df0bE6A17220feD9c9038a"
+
 const FOREIGN_HASHI_TARGET_CHAIN_ID = 100
 const HASHI_THRESHOLD = 1
 
@@ -25,20 +25,14 @@ const USDC_ADDRESS = "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
 const USDT_ADDRESS = "0xdAC17F958D2ee523a2206206994597C13D831ec7"
 const WETH_ADDRESS = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"
 const WRAPPED_GNO = "0x9C58BAcC331c9aa871AFD802DB6379a98e80CEdb"
-const WRAPPED_USDC = "0xDDAfbb505ad214D7b80b1f830fcCc89B60fb7A83"
-const WRAPPED_USDT = "0x4ECaBa5870353805a9F068101A40E0f32ed605C6"
-const WRAPPED_WETH = "0x6A023CCd1ff6F2045C3309768eAd9E68F978f6e1"
 
 const GNO_WHALE = "0xF977814e90dA44bFA03b6295A0616a897441aceC"
-const USDC_WHALE = "0x4E51f628Ec0813964c13107fFfa4C989069E5575"
-const USDT_WHALE = "0x1098503a90c3224F0e6BE7c124a337888C0BA564"
-const WETH_WHALE = "0xbb0ADb1fC2cb1B7b690BD45cFC8903CB04e1c06c"
 
 /**
  * How to run this:
  * - npx hardhat node --fork <your-ethereum-node>
  * - npx hardhat node --fork <your-gnosis-node> --port 8544
- * - npx hardhat AMB:e2e --network fmainnet
+ * - npx hardhat Omnibridge:e2e --network fmainnet
  */
 task("Omnibridge:e2e").setAction(async (_taskArgs, hre) => {
   const { ethers, network } = hre
@@ -87,10 +81,6 @@ task("Omnibridge:e2e").setAction(async (_taskArgs, hre) => {
   const foreignProxy = await EternalStorageProxy.attach(FOREIGN_AMB_PROXY_ADDRESS)
   const foreignBridgeValidators = await BridgeValidators.attach(FOREIGN_BRIDGE_VALIDATOR_ADDRESS)
   const foreignOmnibridge = await ethers.getContractAt("IForeignOmnibridge", FOREIGN_OMNIBRIDGE_PROXY_ADDRESS)
-  const foreignWETHOmnibridgeRouter = await ethers.getContractAt(
-    "IWETHOmnibridgeRouter",
-    WETH_OMNIBRIDGE_ROUTER_ADDRESS,
-  )
 
   let foreignAmb = await ForeignAMB.deploy()
   await foreignProxy.connect(foreignProxyOwner).upgradeTo("6", await foreignAmb.getAddress())
@@ -143,10 +133,6 @@ task("Omnibridge:e2e").setAction(async (_taskArgs, hre) => {
   const homeValidator2 = homeSigners[7]
 
   let wrappedGNO = await ethers.getContractAt("IPermittableToken", WRAPPED_GNO)
-
-  let wrappedUSDC = await ethers.getContractAt("IPermittableToken", WRAPPED_USDC)
-  let wrappedUSDT = await ethers.getContractAt("IPermittableToken", WRAPPED_USDT)
-  let wrappedWETH = await ethers.getContractAt("IPermittableToken", WRAPPED_WETH)
 
   await homeSigners[0].sendTransaction({
     to: HOME_OWNER_ADDRESS,
@@ -329,9 +315,6 @@ task("Omnibridge:e2e").setAction(async (_taskArgs, hre) => {
 
   await gno.connect(gnoWhale).approve(FOREIGN_OMNIBRIDGE_PROXY_ADDRESS, await gno.balanceOf(GNO_WHALE))
 
-  console.log("Sender's GNO balance ", await gno.balanceOf(GNO_WHALE))
-  console.log("Bridge allowance ", await gno.allowance(GNO_WHALE, FOREIGN_OMNIBRIDGE_PROXY_ADDRESS))
-
   tx = await foreignOmnibridge.connect(gnoWhale).relayTokens(GNO_ADDRESS, GNO_WHALE, gnoAmount)
 
   const {
@@ -369,7 +352,6 @@ task("Omnibridge:e2e").setAction(async (_taskArgs, hre) => {
 
   wrappedGNOBalanceBefore = await wrappedGNO.balanceOf(GNO_WHALE)
 
-  console.log("Sender's wrapped GNO balance before ", wrappedGNOBalanceBefore)
   homeSigners = await ethers.getSigners()
 
   console.log("Changing oracle set as if the origianl oracle set is down")
@@ -401,19 +383,13 @@ task("Omnibridge:e2e").setAction(async (_taskArgs, hre) => {
 
   wrappedGNOBalanceBefore = await wrappedGNO.balanceOf(GNO_WHALE)
 
-  console.log("Sender's wrapped balance before relay from GNO", wrappedGNOBalanceBefore)
-
   approve = await wrappedGNO.connect(gnoWhaleOnGnosis).approve(HOME_OMNIBRIDGE_PROXY_ADDRESS, gnoAmount)
   allowance = await wrappedGNO.allowance(GNO_WHALE, HOME_OMNIBRIDGE_PROXY_ADDRESS)
 
   console.log("Relay wrapped GNO from Gnosis")
   tx = await homeOmnibridge.connect(gnoWhaleOnGnosis).relayTokens(WRAPPED_GNO, GNO_WHALE, gnoAmount)
 
-  const {
-    hashiMessage: homeHashiMessage2,
-    decodedMessage: decodedHomeMessage2,
-    messageId: homeMessageId2,
-  } = getRelevantDataFromEvents({
+  const { decodedMessage: decodedHomeMessage2, messageId: homeMessageId2 } = getRelevantDataFromEvents({
     receipt: await tx.wait(1),
     topic: USER_REQUEST_FOR_SIGNATURE_TOPIC,
     abiCoder,

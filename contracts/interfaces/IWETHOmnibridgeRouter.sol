@@ -10,6 +10,6 @@ interface IWETHOmnibridgeRouter {
     function onTokenBridged(address _token, uint256 _value, bytes memory _data) external;
     function owner() external view returns (address);
     function transferOwnership(address _newOwner) external;
-  
+
     function wrapAndRelayTokens(address _receiver) external payable;
 }
