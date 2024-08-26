@@ -1,6 +1,6 @@
 const { ethers } = require("hardhat")
 const { expect } = require("chai")
-
+const { decodeHashiMessage } = require("../tasks/utils/index")
 const HOME_XDAI_PROXY_ADDRESS = "0x7301CFA0e1756B71869E93d4e4Dca5c7d0eb0AA6"
 const PROXY_OWNER_ADDRESS = "0x7a48dac683da91e4faa5ab13d91ab5fd170875bd"
 const BRIDGE_VALIDATOR_OWNER_ADDRESS = "0x7a48dac683da91e4faa5ab13d91ab5fd170875bd"
@@ -8,11 +8,13 @@ const BRIDGE_VALIDATOR_ADDRESS = "0xb289f0e6fbdff8eee340498a56e1787b303f1b6d"
 const HASHI_TARGET_CHAIN_ID = 1
 const HASHI_THRESHOLD = 2
 const USER_REQUEST_FOR_SIGNATURE_TOPIC = "0xbcb4ebd89690a7455d6ec096a6bfc4a8a891ac741ffe4e678ea2614853248658"
+const MESSAGE_DISPATCHED = "0x218247aabc759e65b5bb92ccc074f9d62cd187259f2a0984c3c9cf91f67ff7cf"
 
 // NOTE: be sure to run this in a gnosis chain forked environment
 describe("HomeBridgeErcToNative", () => {
   let homeBridgeErcToNative,
     proxy,
+    proxyOwner,
     fakeReceiver,
     fakeReporter1,
     fakeReporter2,
@@ -46,7 +48,7 @@ describe("HomeBridgeErcToNative", () => {
       params: [BRIDGE_VALIDATOR_OWNER_ADDRESS],
     })
 
-    const proxyOwner = await ethers.provider.getSigner(PROXY_OWNER_ADDRESS)
+    proxyOwner = await ethers.provider.getSigner(PROXY_OWNER_ADDRESS)
     const bridgeValidatorOwner = await ethers.provider.getSigner(BRIDGE_VALIDATOR_OWNER_ADDRESS)
 
     const signers = await ethers.getSigners()
@@ -73,14 +75,14 @@ describe("HomeBridgeErcToNative", () => {
     })
 
     const HomeBridgeErcToNative = await ethers.getContractFactory("HomeBridgeErcToNative")
-    const OwnedUpgradeabilityProxy = await ethers.getContractFactory("OwnedUpgradeabilityProxy")
+
     const BridgeValidators = await ethers.getContractFactory("BridgeValidators")
     const HashiManager = await ethers.getContractFactory("HashiManager")
     const EternalStorageProxy = await ethers.getContractFactory("EternalStorageProxy")
     const MockYaho = await ethers.getContractFactory("MockYaho")
     const MockYaru = await ethers.getContractFactory("MockYaru")
 
-    proxy = await OwnedUpgradeabilityProxy.attach(HOME_XDAI_PROXY_ADDRESS)
+    proxy = await EternalStorageProxy.attach(HOME_XDAI_PROXY_ADDRESS)
     bridgeValidators = await BridgeValidators.attach(BRIDGE_VALIDATOR_ADDRESS)
 
     homeBridgeErcToNative = await HomeBridgeErcToNative.deploy()
@@ -120,6 +122,46 @@ describe("HomeBridgeErcToNative", () => {
     await bridgeValidators.connect(bridgeValidatorOwner).setRequiredSignatures(2)
   })
 
+  it("should be able to relay 10 xDAI", async () => {
+    const amount = ethers.parseEther("10")
+    const balanceBefore = await ethers.provider.getBalance(owner.address)
+    const bridgeBalanceBefore = await ethers.provider.getBalance(await homeBridgeErcToNative.getAddress())
+    await expect(homeBridgeErcToNative.relayTokens(fakeReceiver.address, { value: amount }))
+      .to.emit(homeBridgeErcToNative, "UserRequestForSignature")
+      .to.emit(yaho, "MessageDispatched")
+    expect(await ethers.provider.getBalance(owner.address)).to.lessThan(balanceBefore - amount)
+    expect(await ethers.provider.getBalance(await homeBridgeErcToNative.getAddress())).to.equal(bridgeBalanceBefore)
+  })
+
+  it("should be able to transfer 10 xDAI", async () => {
+    const amount = ethers.parseEther("10")
+    const balanceBefore = await ethers.provider.getBalance(owner.address)
+
+    await expect(
+      owner.sendTransaction({
+        to: await homeBridgeErcToNative.getAddress(),
+        value: amount,
+      }),
+    )
+      .to.emit(homeBridgeErcToNative, "UserRequestForSignature")
+      .to.emit(yaho, "MessageDispatched")
+
+    expect(await ethers.provider.getBalance(owner.address)).to.lessThan(balanceBefore - amount)
+  })
+
+  it("should not be able to transfer 10 xDAI with data", async () => {
+    const amount = ethers.parseEther("10")
+    const balanceBefore = await ethers.provider.getBalance(owner.address)
+
+    await expect(
+      owner.sendTransaction({
+        to: await homeBridgeErcToNative.getAddress(),
+        value: amount,
+        data: "0x1234",
+      }),
+    ).to.be.reverted
+  })
+
   it("should be able to re send an existing message using hashi", async () => {
     const amount = ethers.parseEther("10")
     const tx = await homeBridgeErcToNative.relayTokens(fakeReceiver.address, {
@@ -131,12 +173,55 @@ describe("HomeBridgeErcToNative", () => {
     await expect(homeBridgeErcToNative.resendDataWithHashi(encodedData)).to.emit(yaho, "MessageDispatched")
   })
 
+  it("should be able to change Hashi oracles set and re-send an existing message using hashi", async () => {
+    const amount = ethers.parseEther("10")
+    const tx = await homeBridgeErcToNative.relayTokens(fakeReceiver.address, {
+      value: amount,
+    })
+    const receipt = await tx.wait(1)
+    const requestLog = receipt.logs.find(({ topics }) => topics[0] === USER_REQUEST_FOR_SIGNATURE_TOPIC)
+    const dispatchedLog = receipt.logs.find(({ topics }) => topics[0] === MESSAGE_DISPATCHED)
+    const encodedData = ethers.solidityPacked(["address", "uint256", "bytes32"], requestLog.args)
+
+    // First tx includes original set of reporters and adapters
+    expect(dispatchedLog.data.includes(fakeReporter1.address.slice(2).toLowerCase())).to.equal(true)
+    expect(dispatchedLog.data.includes(fakeReporter2.address.slice(2).toLowerCase())).to.equal(true)
+    expect(dispatchedLog.data.includes(fakeAdapter1.address.slice(2).toLowerCase())).to.equal(true)
+    expect(dispatchedLog.data.includes(fakeAdapter2.address.slice(2).toLowerCase())).to.equal(true)
+
+    let newFakeReporter1 = ethers.Wallet.createRandom().connect(ethers.provider)
+    let newFakeReporter2 = ethers.Wallet.createRandom().connect(ethers.provider)
+    let newFakeAdapter1 = ethers.Wallet.createRandom().connect(ethers.provider)
+    let newFakeAdapter2 = ethers.Wallet.createRandom().connect(ethers.provider)
+
+    // update reporters and adapters in Hashi Manager
+    await hashiManager
+      .connect(proxyOwner)
+      .setReportersAdaptersAndThreshold(
+        [newFakeReporter1.address, newFakeReporter2.address],
+        [newFakeAdapter1.address, newFakeAdapter2.address],
+        HASHI_THRESHOLD,
+      )
+    const resendTx = await homeBridgeErcToNative.resendDataWithHashi(encodedData)
+    const resendReceipt = await resendTx.wait(1)
+    const reDispatchedLog = resendReceipt.logs.find(({ topics }) => topics[0] === MESSAGE_DISPATCHED)
+
+    expect(reDispatchedLog.data.includes(newFakeReporter1.address.slice(2).toLowerCase())).to.equal(true)
+    expect(reDispatchedLog.data.includes(newFakeReporter2.address.slice(2).toLowerCase())).to.equal(true)
+    expect(reDispatchedLog.data.includes(newFakeAdapter1.address.slice(2).toLowerCase())).to.equal(true)
+    expect(reDispatchedLog.data.includes(newFakeAdapter2.address.slice(2).toLowerCase())).to.equal(true)
+    expect(reDispatchedLog.data.includes(fakeReporter1.address.slice(2).toLowerCase())).to.equal(false)
+    expect(reDispatchedLog.data.includes(fakeReporter2.address.slice(2).toLowerCase())).to.equal(false)
+    expect(reDispatchedLog.data.includes(fakeAdapter1.address.slice(2).toLowerCase())).to.equal(false)
+    expect(reDispatchedLog.data.includes(fakeAdapter2.address.slice(2).toLowerCase())).to.equal(false)
+  })
+
   it("should not be able to re send an non-existing message using hashi", async () => {
     const eventData = "0x01"
     await expect(homeBridgeErcToNative.resendDataWithHashi(eventData)).to.be.reverted
   })
 
-  it("should be able to execute an affirmation and mint 10 dai with the hashi approval", async () => {
+  it("should be able to execute an affirmation and mint 10 xdai with the hashi approval", async () => {
     const amount = ethers.parseEther("10")
     const nonce = ethers.toBeHex(1, 32)
     const message = ethers.solidityPacked(["address", "uint256", "bytes32"], [fakeReceiver.address, amount, nonce])
@@ -160,7 +245,7 @@ describe("HomeBridgeErcToNative", () => {
     ).to.emit(homeBridgeErcToNative, "AffirmationCompleted")
   })
 
-  it("should be able to execute an affirmation and mint 10 dai without the hashi approval as it's optional", async () => {
+  it("should be able to execute an affirmation and mint 10 xdai without the hashi approval as it's optional", async () => {
     const amount = ethers.parseEther("10")
     const nonce = ethers.toBeHex(1, 32)
     await homeBridgeErcToNative.connect(validator1).executeAffirmation(fakeReceiver.address, amount, nonce)

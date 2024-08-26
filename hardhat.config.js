@@ -2,21 +2,25 @@ require("@nomicfoundation/hardhat-toolbox")
 require("@openzeppelin/hardhat-upgrades")
 require("hardhat-change-network")
 require("dotenv").config()
+const path = require("path")
 
 require("./tasks/amb-e2e.js")
 require("./tasks/xdai-e2e.js")
+require("./tasks/omnibridge-e2e.js")
 
 module.exports = {
+  // hardhat config
   networks: {
     hardhat: {
       forking: {
-        url: process.env.MAINNET_JSON_RPC_URL, //process.env.GNOSIS_JSON_RPC_URL,
+        url: process.env.GNOSIS_JSON_RPC_URL,
+        // url: process.env.GNOSIS_JSON_RPC_URL, // change the value when running test in fork gnosis environment,
+        // blockNumber: 35443343,
       },
-      chainId: 1,
     },
     gnosis: {
       accounts: [process.env.PRIVATE_KEY],
-      chainId: 1,
+      chainId: 100,
       url: process.env.GNOSIS_JSON_RPC_URL,
     },
     mainnet: {
