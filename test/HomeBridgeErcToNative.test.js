@@ -149,6 +149,19 @@ describe("HomeBridgeErcToNative", () => {
     expect(await ethers.provider.getBalance(owner.address)).to.lessThan(balanceBefore - amount)
   })
 
+  it("should not be able to transfer 10 xDAI with data", async () => {
+    const amount = ethers.parseEther("10")
+    const balanceBefore = await ethers.provider.getBalance(owner.address)
+
+    await expect(
+      owner.sendTransaction({
+        to: await homeBridgeErcToNative.getAddress(),
+        value: amount,
+        data: "0x1234",
+      }),
+    ).to.be.reverted
+  })
+
   it("should be able to re send an existing message using hashi", async () => {
     const amount = ethers.parseEther("10")
     const tx = await homeBridgeErcToNative.relayTokens(fakeReceiver.address, {

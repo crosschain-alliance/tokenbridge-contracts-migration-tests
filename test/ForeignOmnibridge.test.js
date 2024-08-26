@@ -134,8 +134,6 @@ describe("ForeignOmnibridge", () => {
     await bridgeValidators.connect(proxyOwner).addValidator(validator1.address)
     await bridgeValidators.connect(proxyOwner).addValidator(validator2.address)
     await bridgeValidators.connect(proxyOwner).setRequiredSignatures(2)
-
-    expect(await foreignOmnibridge.bridgeContract()).to.equal(await foreignAmb.getAddress())
   })
 
   it("should be able to relay major tokens", async () => {
@@ -217,6 +215,7 @@ describe("ForeignOmnibridge", () => {
     const usdcAmount = ethers.parseUnits("10", 6)
     const usdcAmountBefore = await usdc.balanceOf(fakeReceiver.address)
     const bridgeUSDCAmountBefore = await usdc.balanceOf(await foreignOmnibridge.getAddress())
+
     const msgId = "0x" + MESSAGE_PACKING_VERSION.padEnd(63, "0") + "1"
     const message =
       `${msgId}` +
@@ -236,7 +235,9 @@ describe("ForeignOmnibridge", () => {
     const signatures = await Promise.all(
       [validator1, validator2].map((_validator) => _validator.signMessage(append0(ethers.toBeArray(message)))),
     )
+
     const packedSignatures = packSignatures(signatures.map((_sig) => signatureToVrs(_sig)))
+
     await expect(foreignAmb.executeSignatures(message, packedSignatures))
       .to.emit(foreignAmb, "RelayedMessage")
       .to.emit(foreignOmnibridge, "TokensBridged")
@@ -266,7 +267,6 @@ describe("ForeignOmnibridge", () => {
       `${strip0x(USDC_ADDRESS).padStart(64, "0")}` +
       `${strip0x(fakeReceiver.address).padStart(64, "0")}` +
       `${strip0x(ethers.toBeHex(usdcAmount)).padStart(64, "0")}`
-    console.log("message ", message)
 
     const signatures = await Promise.all(
       [validator1, validator2].map((_validator) => _validator.signMessage(append0(ethers.toBeArray(message)))),

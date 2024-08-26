@@ -54,7 +54,7 @@ describe("HomeOmnibridge", () => {
         {
           forking: {
             jsonRpcUrl: config.networks.hardhat.forking.url,
-            blockNumber: config.networks.hardhat.forking.blockNumber,
+            //   blockNumber: config.networks.hardhat.forking.blockNumber,
           },
         },
       ],
@@ -244,7 +244,7 @@ describe("HomeOmnibridge", () => {
     expect(await wrappedGNO.balanceOf(HOME_OMNIBRIDGE_PROXY_ADDRESS)).to.equal(bridgeGNOAmountBefore)
   })
 
-  it("should be able to execute an affirmation with a validator after that an affirmation has been confirmed by hashi", async () => {
+  it("should be able to execute an affirmation with a validator after the message has been approved by hashi", async () => {
     expect(await homeOmnibridge.bridgeContract()).to.equal(await homeAmb.getAddress())
     const gnoAmount = ethers.parseUnits("10", 18)
     const gnoAmountBefore = await wrappedGNO.balanceOf(fakeReceiver.address)
@@ -279,7 +279,7 @@ describe("HomeOmnibridge", () => {
       ],
     ])
     expect(await homeAmb.isApprovedByHashi(ethers.solidityPackedKeccak256(["bytes"], [message]))).to.be.true
-    // TODO: fix revert at BasicOmnibrige._releaseTokens
+
     await expect(homeAmb.connect(validator1).executeAffirmation(message)).to.emit(homeAmb, "SignedForAffirmation")
 
     await expect(homeAmb.connect(validator2).executeAffirmation(message))
