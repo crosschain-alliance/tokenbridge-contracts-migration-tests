@@ -8,6 +8,10 @@ require("./tasks/amb-e2e.js")
 require("./tasks/xdai-e2e.js")
 require("./tasks/omnibridge-e2e.js")
 
+require("./tasks/deploy/deployAMB.js")
+require("./tasks/deploy/deployxDAI.js")
+require("./tasks/deploy/deployHashiManager.js")
+
 module.exports = {
   // hardhat config
   networks: {
@@ -19,6 +23,11 @@ module.exports = {
       },
     },
     gnosis: {
+      accounts: [process.env.PRIVATE_KEY],
+      chainId: 100,
+      url: process.env.GNOSIS_JSON_RPC_URL,
+    },
+    xdai: {
       accounts: [process.env.PRIVATE_KEY],
       chainId: 100,
       url: process.env.GNOSIS_JSON_RPC_URL,
@@ -35,6 +44,34 @@ module.exports = {
       url: "http://127.0.0.1:8544",
     },
   },
+  etherscan: {
+    apiKey: {
+      sepolia: process.env.ETHERSCAN_API_KEY,
+      chiado: process.env.BLOCKSCOUT_API_KEY,
+      gnosis: process.env.GNOSISSCAN_API_KEY,
+      xdai: process.env.BLOCKSCOUT_API_KEY, // use --network xdai to verify on blockscout
+      mainnet: process.env.ETHERSCAN_API_KEY,
+    },
+    customChains: [
+      {
+        network: 'xdai',
+        chainId: 100,
+        urls: {
+          apiURL: 'https://gnosis.blockscout.com//api',
+          browserURL: 'https://gnosis.blockscout.com/',
+        },
+      },
+      {
+        network: 'chiado',
+        chainId: 10200,
+        urls: {
+          apiURL: 'https://gnosis-chiado.blockscout.com/api',
+          browserURL: 'https://gnosis-chiado.blockscout.com/',
+        },
+      },
+    ],
+  },
+  
   solidity: {
     compilers: [
       {
