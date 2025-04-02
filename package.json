@@ -6,7 +6,11 @@
   "scripts": {
     "test": "npx hardhat test",
     "postinstall": "patch-package",
-    "prettier:write": "prettier --write \"**/*.{js,json,md,sol,ts,yml}\""
+    "prettier:write": "prettier --write \"**/*.{js,json,md,sol,ts,yml}\"",
+    "deploy:xdai": "chmod +x ./scripts/deployxDAI.sh && ./scripts/deployxDAI.sh",
+    "deploy:amb": "chmod +x ./scripts/deployAMB.sh && ./scripts/deployAMB.sh",
+    "bytecode:xdai": "chmod +x ./scripts/bytecodexDAI.sh && ./scripts/bytecodexDAI.sh",
+    "bytecode:amb": "chmod +x ./scripts/bytecodeAMB.sh && ./scripts/bytecodeAMB.sh"
   },
   "author": "alle.manfredi@gmail.com",
   "license": "MIT",

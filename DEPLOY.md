@@ -8,31 +8,23 @@ npm install
 git submodule update --init
 ```
 
-## Deploy AMB
+## Deployment
 
-```
-cd tokenbridge-contracts
-git switch feat/hashi-integration-amb
-cd ..
-npx hardhat compile
-npx hardhat deploy:ForeignAMB --network mainnet
-npx hardhat deploy:HomeAMB --network gnosis
-```
+1. AMB: `npm deploy:amb`
+2. xDAI:`npm deploy:xdai`
+3. Hashi Manager: `npx hardhat deploy:HashiManager --network <Network name>`
 
-## Deploy xDAI
+## Generate the deployBytecode
 
-```
-cd tokenbridge-contracts
-git switch feat/hashi-integration-xdai-bridge
-cd ..
-npx hardhat compile
-npx hardhat deploy:ForeignxDAIBridge--network mainnet
-npx hardhat deploy:HomexDAIBridge --network gnosis
-```
+To generate the deployedBytecode for verification purpose, run the following command:
 
-## Deploy HashiManager
+1. AMB: `npm run bytecode:xdai`
+2. xDAI: `npm run bytecode:amb`
 
-```
-npx hardhat compile
-npx hardhat deploy:HashiManager --network <Network name>
-```
+The deployed bytecode will be written into `deployedBytecode_AMB.json`, or `deployedBytecode_xDAU.json` respectively.
+
+# Common Error
+
+1. Error
+   ` Unsupported platform for @nomicfoundation/edr-darwin-x64@0.3.4: wanted {"os":"darwin","cpu":"x64"} (current: {"os":"darwin","cpu":"arm64"})`  
+   In `package.json`, change to `@nomicfoundation/edr-darwin-arm64`
