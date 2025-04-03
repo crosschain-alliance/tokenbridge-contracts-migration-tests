@@ -20,6 +20,7 @@ To generate the deployedBytecode for verification purpose, run the following com
 
 1. AMB: `npm run bytecode:amb`
 2. xDAI: `npm run bytecode:xdai`
+3. HashiManager: `npm run bytecode:hashimanager`
 
 The deployed bytecode will be written into `deployedBytecode_AMB.json`, or `deployedBytecode_xDAU.json` respectively.
 
