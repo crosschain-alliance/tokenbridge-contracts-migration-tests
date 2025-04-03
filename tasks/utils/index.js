@@ -1,3 +1,5 @@
+const SafeApiKit = require("@safe-global/api-kit").default
+
 const { append0 } = require("../../test/utils/index")
 
 const MESSAGE_DISPATCHED_TOPIC = "0x218247aabc759e65b5bb92ccc074f9d62cd187259f2a0984c3c9cf91f67ff7cf"
@@ -75,3 +77,45 @@ module.exports.getValidatorsSignatures = ({ validators, message, bridge = "amb" 
       _validator.signMessage(bridge === "amb" ? append0(ethers.toBeArray(message)) : ethers.toBeArray(message)),
     ),
   )
+
+module.exports.getApprovedHashSignerAndConfirmationFromPendingTransactions = async (pendingTransaction, owner) => {
+  const confirmation = pendingTransaction.confirmations.find(({ signatureType }) => signatureType === "APPROVED_HASH")
+  await network.provider.request({
+    method: "hardhat_impersonateAccount",
+    params: [confirmation.owner],
+  })
+  const confOwner = await ethers.provider.getSigner(confirmation.owner)
+  await owner.sendTransaction({
+    to: confOwner.address,
+    value: ethers.parseEther("1"),
+  })
+
+  return { confirmation, owner: confOwner }
+}
+
+module.exports.getSafeHomeAndForeignPendingTransactionsFromLinks = async (homeSafeTxLink, foreignSafeTxLink) => {
+  const extractSafeAddressAndSafeTxHashFromLink = (link) => {
+    const parts = new URL(link).searchParams.get("id").split("_")
+    return {
+      safe: parts[1],
+      safeTxHash: parts[2],
+    }
+  }
+  const homeData = extractSafeAddressAndSafeTxHashFromLink(homeSafeTxLink)
+  const foreigData = extractSafeAddressAndSafeTxHashFromLink(foreignSafeTxLink)
+  const foreignSafeApi = new SafeApiKit({ chainId: 1n })
+  const foreignPendingTransactions = await foreignSafeApi.getPendingTransactions(foreigData.safe)
+  const foreignPendingTransaction = foreignPendingTransactions.results.find(
+    ({ safeTxHash }) => safeTxHash === foreigData.safeTxHash,
+  )
+  const homeSafeApi = new SafeApiKit({ chainId: 100n })
+  const homePendingTransactions = await homeSafeApi.getPendingTransactions(homeData.safe)
+  const homePendingTransaction = homePendingTransactions.results.find(
+    ({ safeTxHash }) => safeTxHash === homeData.safeTxHash,
+  )
+
+  return {
+    homePendingTransaction,
+    foreignPendingTransaction,
+  }
+}
