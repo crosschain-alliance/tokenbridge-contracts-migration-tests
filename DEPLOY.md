@@ -18,8 +18,8 @@ git submodule update --init
 
 To generate the deployedBytecode for verification purpose, run the following command:
 
-1. AMB: `npm run bytecode:xdai`
-2. xDAI: `npm run bytecode:amb`
+1. AMB: `npm run bytecode:amb`
+2. xDAI: `npm run bytecode:xdai`
 
 The deployed bytecode will be written into `deployedBytecode_AMB.json`, or `deployedBytecode_xDAU.json` respectively.
 
