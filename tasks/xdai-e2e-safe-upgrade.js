@@ -46,6 +46,9 @@ task("XDAIBridge:e2e-safe-upgrade")
     const { homePendingTransaction, foreignPendingTransaction } =
       await getSafeHomeAndForeignPendingTransactionsFromLinks(homeSafeTxLink, foreignSafeTxLink)
 
+    if (!homePendingTransaction) throw new Error("Home transaction not found")
+    if (!foreignPendingTransaction) throw new Error("Foreign transaction not found")
+
     // M A I N N E T
     await network.provider.request({
       method: "hardhat_impersonateAccount",
